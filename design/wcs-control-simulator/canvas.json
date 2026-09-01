@@ -1,0 +1,20 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "Main Dashboard", "is_interactive": true },
+    { "file": "StyleGuide.dc.html", "x": 0, "y": 1060, "w": 1440, "h": 1300, "title": "Style Guide" },
+    { "file": "WarehouseMap.dc.html", "x": 1580, "y": 1060, "w": 1440, "h": 900, "title": "Warehouse Map — Detail" }
+  ],
+  "annotations": [
+    { "id": "note-nav", "x": 1500, "y": 20, "w": 250, "text": "① 좌측 고정 내비게이션\nDashboard / Warehouse Map / Order Management / Equipment Control / Simulation Log / Settings — 항상 화면 좌상단에 고정." },
+    { "id": "note-topbar", "x": 1500, "y": 150, "w": 250, "text": "② 상단 바\nLIVE SYNC 상태, 실시간 시계, 알림 뱃지, 운영자 정보로 시스템 헬스를 즉시 확인." },
+    { "id": "note-map", "x": 1500, "y": 250, "w": 250, "text": "③ 오더 처리 흐름도 (화면의 약 74%)\n디지털트윈식 평면도가 아니라, 설비를 실제 처리 순서대로 좌→우 배치한 프로세스 다이어그램입니다. 각 노드 하단에 IN←/OUT→ 표기로 앞·뒤 설비와의 연결을 명시합니다." },
+    { "id": "note-branch", "x": 1500, "y": 400, "w": 250, "text": "④ 분기 / 합류 지점\nSORT JUNCTION(◆)에서 오더 유형에 따라 크레인→랙 경로 또는 AMR 경로로 분기되고, 두 경로는 PICK STATION에서 다시 합류합니다 — 오더가 어떻게 설비를 옮겨 다니는지 보여주는 핵심 지점." },
+    { "id": "note-transfer", "x": 1500, "y": 540, "w": 250, "text": "⑤ TRANSFER DOCK (환승/경유 도크)\n피킹 완료 상품이 출고 전 임시 대기하는 버퍼 노드입니다. 점선 테두리로 일반 프로세스 노드와 구분했습니다." },
+    { "id": "note-io", "x": 1500, "y": 660, "w": 250, "text": "⑥ Input/Output은 도크에 통합\n별도 패널 대신 INBOUND/OUTBOUND DOCK 노드에 건수·대기·미니 막대를 직접 배지로 표시 — 흐름의 시작·끝점에서 바로 트래픽을 확인." },
+    { "id": "note-sidebar", "x": 1500, "y": 780, "w": 250, "text": "⑦ 우측 슬림 레일 (약 26%)\nKPI 미니 그리드 + 오더 할당 패널만 남겨 지도가 화면을 압도하도록 구성. 카드를 클릭하면 지도 위 연결된 설비가 글로우로 하이라이트됩니다 (실제 클릭 가능)." },
+    { "id": "note-flow", "x": 1500, "y": 900, "w": 250, "text": "인터랙션 흐름\n오더카드 Execute 클릭 → 상태 ACTIVE 전환 & 진행바 시작 → 지도상 배정 설비 글로우 하이라이트 → 완료 시 진행률 100%·Outbound Dock 카운트 반영 → Pause/Reassign은 언제든 상태를 되돌려 재할당." },
+    { "id": "note-styleguide", "x": 0, "y": 990, "w": 400, "text": "스타일 가이드 — 레드/다크 브랜드 팔레트, 정상/주의/오류 상태색(브랜드 레드와 분리해 중립 칩 위에 배치), 타이포 스케일, 핵심 컴포넌트 명세." },
+    { "id": "note-mapdetail", "x": 1580, "y": 990, "w": 400, "text": "Warehouse Map 상세 화면 — 실제 공간 배치가 궁금할 때 보는 보조 화면(설비 위치 + Equipment Inspector). 메인 대시보드는 '처리 순서', 이 화면은 '물리적 위치'를 보여주는 역할 분담입니다." }
+  ],
+  "launch": { "view": "canvas" }
+}

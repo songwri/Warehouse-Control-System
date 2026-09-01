@@ -1,0 +1,279 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    :root{
+      --bg-void:#0a0708; --bg-panel:#1a1113;
+      --glass-a:rgba(255,255,255,.045); --glass-b:rgba(255,255,255,.018);
+      --border-soft:rgba(255,255,255,.09); --border-red:rgba(255,90,90,.28);
+      --text-1:#fbf6f6; --text-2:#cdbfc2; --text-3:#9c8b8f;
+      --red-500:#ff4646; --red-600:#e0233a; --red-700:#8f1526; --ember:#ff8a52;
+      --status-ok:#3fe2a0; --status-warn:#ffcc4d; --status-err:#ff2d6b; --status-off:#8a9099;
+      --font-display:'Chakra Petch',sans-serif; --font-body:'IBM Plex Sans',sans-serif; --font-mono:'IBM Plex Mono',monospace;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--bg-void);}
+    .root{width:1440px;height:900px;position:relative;overflow:hidden;
+      background:radial-gradient(1100px 560px at 78% -8%, rgba(255,59,59,.08), transparent 60%), var(--bg-void);
+      font-family:var(--font-body); color:var(--text-1); line-height:1.45; display:flex;}
+    .glass{background:linear-gradient(180deg,var(--glass-a),var(--glass-b)); border:1px solid var(--border-soft);
+      border-radius:16px; box-shadow:0 1px 0 rgba(255,255,255,.05) inset, 0 24px 48px -28px rgba(0,0,0,.75);}
+
+    .nav{width:104px; flex-shrink:0; height:900px; display:flex; flex-direction:column;
+      background:linear-gradient(180deg,#170e10,#0d0809); border-right:1px solid var(--border-soft);}
+    .nav-logo{height:76px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid var(--border-soft);}
+    .nav-logo .mark{width:36px;height:36px;border-radius:10px; display:flex;align-items:center;justify-content:center;
+      background:linear-gradient(135deg,var(--red-500),var(--red-700)); box-shadow:0 0 22px -4px rgba(255,59,59,.7);}
+    .nav-logo .mark svg{width:19px;height:19px;color:#100708;}
+    .nav-items{flex:1; display:flex; flex-direction:column; gap:6px; padding:16px 8px;}
+    .nav-item{display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 4px; border-radius:10px; color:var(--text-3); position:relative;}
+    .nav-item svg{width:21px;height:21px; flex-shrink:0;}
+    .nav-item .lbl{font-size:11px; font-weight:600; line-height:1.3; text-align:center;}
+    .nav-item.active{color:var(--red-500); background:linear-gradient(180deg,rgba(255,59,59,.16),rgba(255,59,59,.04));}
+    .nav-item.active .lbl{color:var(--text-1);}
+    .nav-item.active::before{content:"";position:absolute;left:-8px;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--red-500); box-shadow:0 0 12px 1px var(--red-500);}
+
+    .main{flex:1; min-width:0; display:flex; flex-direction:column;}
+    .topbar{height:72px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 28px; border-bottom:1px solid var(--border-soft);}
+    .page-title{font-family:var(--font-display); font-size:21px; font-weight:700; letter-spacing:.02em;}
+    .page-sub{font-size:13px; color:var(--text-2); margin-top:3px;}
+    .zoom-group{display:flex; align-items:center; gap:6px; background:var(--glass-a); border:1px solid var(--border-soft); border-radius:10px; padding:4px;}
+    .zoom-btn{width:30px;height:30px;border-radius:7px; display:flex;align-items:center;justify-content:center; color:var(--text-2); font-family:var(--font-mono); font-size:14px;}
+    .zoom-btn.mid{width:auto; padding:0 11px; font-size:12.5px;}
+
+    .content{flex:1; overflow:hidden; padding:20px 28px 24px; display:flex; gap:16px;}
+
+    .map-panel{flex:1; display:flex; flex-direction:column; min-width:0;}
+    .panel-head{display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px;}
+    .panel-title{font-family:var(--font-body); font-size:15px; font-weight:600; letter-spacing:.01em; color:var(--text-1);}
+    .legend{display:flex; gap:16px; flex-wrap:wrap;}
+    .legend-item{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-2);}
+    .legend-swatch{width:10px;height:10px;border-radius:3px; flex-shrink:0;}
+    .legend-line{width:14px;height:2px;border-radius:2px; flex-shrink:0;}
+
+    .map-body{flex:1; margin:0 16px 16px; border-radius:12px; position:relative; overflow:hidden; background-color:#170e0f;
+      background-image:
+        linear-gradient(30deg, rgba(255,80,80,.032) 12%, transparent 12.5%, transparent 87%, rgba(255,80,80,.032) 87.5%, rgba(255,80,80,.032)),
+        linear-gradient(150deg, rgba(255,80,80,.032) 12%, transparent 12.5%, transparent 87%, rgba(255,80,80,.032) 87.5%, rgba(255,80,80,.032)),
+        linear-gradient(30deg, rgba(255,80,80,.032) 12%, transparent 12.5%, transparent 87%, rgba(255,80,80,.032) 87.5%, rgba(255,80,80,.032)),
+        linear-gradient(150deg, rgba(255,80,80,.032) 12%, transparent 12.5%, transparent 87%, rgba(255,80,80,.032) 87.5%, rgba(255,80,80,.032)),
+        linear-gradient(60deg, rgba(255,80,80,.028) 25%, transparent 25.5%, transparent 75%, rgba(255,80,80,.028) 75%, rgba(255,80,80,.028)),
+        linear-gradient(60deg, rgba(255,80,80,.028) 25%, transparent 25.5%, transparent 75%, rgba(255,80,80,.028) 75%, rgba(255,80,80,.028));
+      background-size:46px 80px; background-position:0 0, 0 0, 23px 40px, 23px 40px, 0 0, 23px 40px; border:1px solid var(--border-soft);}
+    .node{position:absolute;}
+    .equip-box{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02)); border:1px solid var(--border-soft);
+      border-radius:12px; padding:9px 11px; display:flex; flex-direction:column; gap:6px;}
+    .equip-box.selected{border-color:var(--red-500); box-shadow:0 0 0 1px var(--red-500), 0 0 26px -6px rgba(255,59,59,.85);}
+    .equip-label{font-size:11.5px; color:var(--text-1); font-family:var(--font-body); font-weight:500;}
+    .dock-box{width:58px;height:34px;border-radius:7px; border:1px dashed var(--border-red); display:flex;align-items:center;justify-content:center;
+      font-family:var(--font-mono); font-size:11.5px; font-weight:500; color:var(--text-1); background:rgba(255,59,59,.06);}
+    .flow-line{position:absolute; height:2px; background:linear-gradient(90deg, var(--red-600), var(--red-500)); box-shadow:0 0 6px 0 rgba(255,59,59,.4);}
+    .flow-line.ember{background:linear-gradient(90deg, var(--ember), #ffb35a); box-shadow:0 0 6px 0 rgba(255,122,61,.4);}
+    .chevron{position:absolute; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:6px solid var(--red-500); filter:drop-shadow(0 0 3px rgba(255,59,59,.6));}
+    .item-token{position:absolute; width:8px;height:8px;border-radius:50%; background:var(--red-500); box-shadow:0 0 8px 2px rgba(255,59,59,.65);}
+    .junction{width:30px;height:30px; transform:rotate(45deg); background:linear-gradient(135deg,var(--red-600),var(--bg-panel)); border:1px solid var(--border-red); box-shadow:0 0 14px -2px rgba(255,59,59,.5);}
+    .rack-grid{display:grid; grid-template-columns:repeat(6,1fr); gap:3px; width:100%; height:100%;}
+    .rack-cell{border-radius:2px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08);}
+    .rack-cell.fill{background:rgba(255,204,77,.4); border-color:rgba(255,204,77,.6);}
+    .rack-cell.err{background:rgba(255,45,107,.4); border-color:rgba(255,45,107,.65);}
+    .crane-rail{position:absolute; width:3px; border-radius:2px; background:linear-gradient(180deg, var(--red-500), transparent); box-shadow:0 0 8px 1px rgba(255,59,59,.4);}
+    .amr-dot{width:22px;height:22px;border-radius:7px; background:var(--bg-panel); border:1.5px solid var(--red-500); display:flex;align-items:center;justify-content:center; color:var(--red-500); box-shadow:0 0 12px -2px rgba(255,59,59,.6);}
+    .amr-dot svg{width:13px;height:13px;}
+    .amr-path{position:absolute; border:1.5px dashed rgba(255,124,90,.4); border-radius:50%;}
+    .map-tag{position:absolute; font-family:var(--font-mono); font-size:11px; font-weight:500; color:var(--text-2);
+      background:rgba(10,7,8,.62); padding:3px 8px; border-radius:6px; border:1px solid var(--border-soft);}
+    .belt-strip{position:absolute; height:16px; border-radius:8px; background:repeating-linear-gradient(90deg, rgba(255,59,59,.35) 0 8px, rgba(255,59,59,.08) 8px 16px); border:1px solid var(--border-red);}
+
+    .inspector{width:340px; flex-shrink:0; display:flex; flex-direction:column; gap:16px; padding:22px;}
+    .insp-head{display:flex; align-items:center; gap:13px;}
+    .insp-icon{width:46px;height:46px;border-radius:12px; background:linear-gradient(135deg,rgba(255,59,59,.24),rgba(255,59,59,.05)); border:1px solid var(--border-red);
+      display:flex;align-items:center;justify-content:center; color:var(--red-500);}
+    .insp-icon svg{width:23px;height:23px;}
+    .insp-name{font-family:var(--font-body); font-size:16px; font-weight:600; color:var(--text-1);}
+    .insp-id{font-family:var(--font-mono); font-size:12px; color:var(--text-2); margin-top:2px;}
+    .insp-chip{display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:500; font-family:var(--font-mono); padding:6px 12px; border-radius:999px; background:rgba(255,204,77,.12); border:1px solid rgba(255,204,77,.35); color:var(--status-warn); width:fit-content;}
+    .insp-dot{width:6px;height:6px;border-radius:50%; background:var(--status-warn); flex-shrink:0;}
+    .insp-metrics{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+    .metric{background:rgba(255,255,255,.04); border:1px solid var(--border-soft); border-radius:10px; padding:11px 13px;}
+    .metric-label{font-size:11px; color:var(--text-2); text-transform:uppercase; letter-spacing:.02em; font-weight:500;}
+    .metric-value{font-family:var(--font-mono); font-size:17px; margin-top:4px; color:var(--text-1);}
+    .insp-section-title{font-size:11.5px; color:var(--text-2); text-transform:uppercase; letter-spacing:.02em; font-weight:600; margin:6px 0 -2px;}
+    .insp-log{display:flex; flex-direction:column; gap:9px;}
+    .insp-log-row{display:flex; gap:9px; font-size:12.5px; color:var(--text-2); line-height:1.4;}
+    .insp-log-row .t{font-family:var(--font-mono); font-size:11px; color:var(--text-3); flex-shrink:0; width:44px;}
+    .insp-actions{display:flex; gap:8px; margin-top:4px;}
+    .insp-btn{flex:1; height:36px; border-radius:8px; font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:center;}
+    .btn-primary{background:linear-gradient(135deg,var(--red-500),var(--red-700)); color:#150506;}
+    .btn-ghost{background:transparent; border:1px solid var(--border-soft); color:var(--text-2);}
+  </style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M12 2 20.5 7V17L12 22 3.5 17V7Z"/><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-orders" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3V2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="M8 10h8M8 14h8M8 18h5"/></symbol>
+    <symbol id="i-equip" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-log" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><line x1="12" y1="15" x2="17" y2="15"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-robot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="10" rx="3"/><circle cx="9" cy="13" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="13" r="1.3" fill="currentColor" stroke="none"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1.1"/></symbol>
+    <symbol id="i-crane" viewBox="0 0 24 24"><path d="M4 21h16M6 21V9l6-5 6 5v12"/><path d="M12 4v6M9 10h6"/></symbol>
+  </defs>
+</svg>
+
+<div class="root">
+  <nav class="nav">
+    <div class="nav-logo"><div class="mark"><svg viewBox="0 0 24 24"><use href="#i-bolt"/></svg></div></div>
+    <div class="nav-items">
+      <div class="nav-item"><svg><use href="#i-grid"/></svg><span class="lbl">Dashboard</span></div>
+      <div class="nav-item active"><svg><use href="#i-map"/></svg><span class="lbl">Warehouse<br>Map</span></div>
+      <div class="nav-item"><svg><use href="#i-orders"/></svg><span class="lbl">Order<br>Management</span></div>
+      <div class="nav-item"><svg><use href="#i-equip"/></svg><span class="lbl">Equipment<br>Control</span></div>
+      <div class="nav-item"><svg><use href="#i-log"/></svg><span class="lbl">Simulation<br>Log</span></div>
+    </div>
+    <div style="padding:12px 8px; border-top:1px solid var(--border-soft);">
+      <div class="nav-item"><svg><use href="#i-settings"/></svg><span class="lbl">Settings</span></div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="page-title">WAREHOUSE MAP</div>
+        <div class="page-sub">Zone 1-4 · 실시간 설비 위치 및 자재 흐름</div>
+      </div>
+      <div class="zoom-group">
+        <div class="zoom-btn">−</div>
+        <div class="zoom-btn mid">100%</div>
+        <div class="zoom-btn">+</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="glass map-panel">
+        <div class="panel-head">
+          <div class="panel-title">FULL FLOOR VIEW</div>
+          <div class="legend">
+            <div class="legend-item"><span class="legend-line" style="background:var(--red-500)"></span>입고 컨베이어</div>
+            <div class="legend-item"><span class="legend-line" style="background:var(--ember)"></span>출고 컨베이어</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--status-warn)"></span>랙 점유</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--status-err)"></span>오류 셀</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--red-500); border-radius:50%;"></span>선택된 설비</div>
+          </div>
+        </div>
+
+        <div class="map-body">
+          <div class="node" style="left:20px; top:30px;"><div class="dock-box">DOCK 1</div></div>
+          <div class="node" style="left:20px; top:70px;"><div class="dock-box">DOCK 2</div></div>
+          <div class="node" style="left:20px; top:110px;"><div class="dock-box">DOCK 3</div></div>
+          <div class="map-tag" style="left:18px; top:12px;">INBOUND</div>
+
+          <div class="belt-strip" style="left:76px; top:38px; width:130px;"></div>
+          <div class="belt-strip" style="left:76px; top:78px; width:130px;"></div>
+          <div class="belt-strip" style="left:76px; top:118px; width:130px;"></div>
+          <div class="chevron" style="left:198px; top:34px;"></div>
+          <div class="chevron" style="left:198px; top:74px;"></div>
+          <div class="item-token" style="left:120px; top:34px;"></div>
+          <div class="item-token" style="left:160px; top:114px;"></div>
+
+          <div class="node junction" style="left:216px; top:70px;"></div>
+          <div class="map-tag" style="left:198px; top:108px;">JUNCTION-01</div>
+
+          <div class="flow-line" style="left:246px; top:60px; width:90px; transform:rotate(-14deg); transform-origin:0 0;"></div>
+          <div class="flow-line" style="left:246px; top:85px; width:100px; transform:rotate(10deg); transform-origin:0 0;"></div>
+
+          <div class="node" style="left:340px; top:16px; width:230px; height:150px;">
+            <div class="equip-box selected" style="width:100%; height:100%;">
+              <span class="equip-label">STORAGE RACK · B-11</span>
+              <div class="rack-grid">
+                <div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell fill"></div><div class="rack-cell"></div>
+                <div class="rack-cell"></div><div class="rack-cell fill"></div><div class="rack-cell err"></div><div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell"></div>
+                <div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell"></div><div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell fill"></div>
+                <div class="rack-cell"></div><div class="rack-cell fill"></div><div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell"></div><div class="rack-cell"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="node" style="left:600px; top:16px; width:170px; height:150px;">
+            <div class="equip-box" style="width:100%; height:100%;">
+              <span class="equip-label">STORAGE RACK · B-12</span>
+              <div class="rack-grid">
+                <div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell fill"></div><div class="rack-cell"></div>
+                <div class="rack-cell"></div><div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell fill"></div>
+                <div class="rack-cell fill"></div><div class="rack-cell"></div><div class="rack-cell"></div><div class="rack-cell"></div>
+                <div class="rack-cell"></div><div class="rack-cell fill"></div><div class="rack-cell fill"></div><div class="rack-cell"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="node" style="left:800px; top:30px;">
+            <div class="crane-rail" style="left:14px; top:0; height:200px;"></div>
+            <div class="equip-box" style="width:64px; align-items:center;">
+              <svg style="width:22px;height:22px; color:var(--red-500);"><use href="#i-crane"/></svg>
+              <span class="equip-label">CRANE-02</span>
+            </div>
+          </div>
+
+          <div class="amr-path" style="left:360px; top:200px; width:180px; height:110px;"></div>
+          <div class="node" style="left:400px; top:240px;"><div class="amr-dot"><svg><use href="#i-robot"/></svg></div></div>
+          <div class="node" style="left:480px; top:270px;"><div class="amr-dot"><svg><use href="#i-robot"/></svg></div></div>
+          <div class="map-tag" style="left:390px; top:314px;">AMR FLEET · 6 UNITS</div>
+
+          <div class="amr-path" style="left:620px; top:210px; width:150px; height:96px;"></div>
+          <div class="node" style="left:650px; top:246px;"><div class="amr-dot"><svg><use href="#i-robot"/></svg></div></div>
+
+          <div class="flow-line ember" style="left:340px; top:340px; width:120px;"></div>
+          <div class="flow-line ember" style="left:460px; top:340px; width:340px;"></div>
+          <div class="chevron" style="left:790px; top:336px; border-left-color:var(--ember);"></div>
+          <div class="item-token" style="left:640px; top:337px; background:var(--ember); box-shadow:0 0 10px 3px rgba(255,122,61,.7);"></div>
+          <div class="map-tag" style="left:340px; top:352px;">PICK → OUTBOUND</div>
+
+          <div class="node" style="left:860px; top:300px;"><div class="dock-box" style="border-color:rgba(255,122,61,.4)">DOCK 5</div></div>
+          <div class="node" style="left:860px; top:340px;"><div class="dock-box" style="border-color:rgba(255,122,61,.4)">DOCK 6</div></div>
+          <div class="map-tag" style="left:856px; top:282px;">OUTBOUND</div>
+        </div>
+      </div>
+
+      <div class="glass inspector">
+        <div class="insp-head">
+          <div class="insp-icon"><svg><use href="#i-log"/></svg></div>
+          <div>
+            <div class="insp-name">Storage Rack B-11</div>
+            <div class="insp-id">EQUIP-ID · RACK-011</div>
+          </div>
+        </div>
+        <div class="insp-chip"><span class="insp-dot"></span>WARNING — 셀 1개 이상 감지 오류</div>
+
+        <div class="insp-metrics">
+          <div class="metric"><div class="metric-label">Utilization</div><div class="metric-value">78%</div></div>
+          <div class="metric"><div class="metric-label">Capacity</div><div class="metric-value">240 slots</div></div>
+          <div class="metric"><div class="metric-label">Last Maint.</div><div class="metric-value" style="font-size:12.5px;">14d ago</div></div>
+          <div class="metric"><div class="metric-label">Linked Order</div><div class="metric-value" style="font-size:12.5px; color:var(--red-500);">ORD-48224</div></div>
+        </div>
+
+        <div class="insp-section-title">Recent Activity</div>
+        <div class="insp-log">
+          <div class="insp-log-row"><span class="t">14:31</span>셀 C-08 감지 오류 발생</div>
+          <div class="insp-log-row"><span class="t">14:18</span>ORD-48224 피킹 할당</div>
+          <div class="insp-log-row"><span class="t">13:52</span>정기 점유율 스캔 완료</div>
+        </div>
+
+        <div class="insp-actions">
+          <button class="insp-btn btn-primary">Diagnose</button>
+          <button class="insp-btn btn-ghost">View Log</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

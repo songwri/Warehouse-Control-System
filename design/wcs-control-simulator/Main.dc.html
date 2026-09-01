@@ -1,0 +1,460 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    :root{
+      --bg-void:#0a0708; --bg-deep:#130c0e; --bg-panel:#1a1113;
+      --glass-a:rgba(255,255,255,.045); --glass-b:rgba(255,255,255,.018);
+      --border-soft:rgba(255,255,255,.09); --border-red:rgba(255,90,90,.28);
+      --text-1:#fbf6f6; --text-2:#cdbfc2; --text-3:#9c8b8f;
+      --red-500:#ff4646; --red-600:#e0233a; --red-700:#8f1526; --ember:#ff8a52;
+      --status-ok:#3fe2a0; --status-warn:#ffcc4d; --status-err:#ff2d6b; --status-off:#8a9099;
+      --radius-lg:16px; --radius-md:12px; --radius-sm:8px;
+      --font-display:'Chakra Petch',sans-serif; --font-body:'IBM Plex Sans',sans-serif; --font-mono:'IBM Plex Mono',monospace;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--bg-void);}
+    a{color:var(--red-500);} a:hover{color:var(--ember);}
+    .root{width:1440px;height:900px;position:relative;overflow:hidden;
+      background:radial-gradient(1100px 560px at 78% -8%, rgba(255,59,59,.08), transparent 60%),
+                 radial-gradient(700px 420px at 8% 108%, rgba(255,122,61,.05), transparent 60%),
+                 var(--bg-void);
+      font-family:var(--font-body); color:var(--text-1); line-height:1.45; display:flex;}
+    .grain{position:absolute; inset:0; pointer-events:none;
+      background-image:repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0px, transparent 1px, transparent 2px);}
+
+    .glass{background:linear-gradient(180deg,var(--glass-a),var(--glass-b)); border:1px solid var(--border-soft);
+      border-radius:var(--radius-lg); box-shadow:0 1px 0 rgba(255,255,255,.05) inset, 0 24px 48px -28px rgba(0,0,0,.75);}
+
+    /* ---- left nav ---- */
+    .nav{width:104px; flex-shrink:0; height:900px; display:flex; flex-direction:column; align-items:stretch;
+      background:linear-gradient(180deg,#170e10,#0d0809); border-right:1px solid var(--border-soft); position:relative; z-index:3;}
+    .nav-logo{height:76px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid var(--border-soft);}
+    .nav-logo .mark{width:36px;height:36px;border-radius:10px; display:flex;align-items:center;justify-content:center;
+      background:linear-gradient(135deg,var(--red-500),var(--red-700)); box-shadow:0 0 22px -4px rgba(255,59,59,.7);}
+    .nav-logo .mark svg{width:19px;height:19px;color:#100708;}
+    .nav-items{flex:1; display:flex; flex-direction:column; gap:6px; padding:16px 8px;}
+    .nav-item{display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 4px; border-radius:10px;
+      color:var(--text-3); position:relative; cursor:pointer;}
+    .nav-item svg{width:21px;height:21px; flex-shrink:0;}
+    .nav-item .lbl{font-size:11px; font-weight:600; letter-spacing:0; font-family:var(--font-body); line-height:1.3; text-align:center;}
+    .nav-item.active{color:var(--red-500); background:linear-gradient(180deg,rgba(255,59,59,.16),rgba(255,59,59,.04));}
+    .nav-item.active .lbl{color:var(--text-1);}
+    .nav-item.active::before{content:"";position:absolute;left:-8px;top:8px;bottom:8px;width:3px;border-radius:3px;
+      background:var(--red-500); box-shadow:0 0 12px 1px var(--red-500);}
+    .nav-foot{padding:12px 8px; border-top:1px solid var(--border-soft);}
+
+    /* ---- main column ---- */
+    .main{flex:1; min-width:0; display:flex; flex-direction:column; position:relative; z-index:2;}
+    .topbar{height:72px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+      padding:0 28px; border-bottom:1px solid var(--border-soft);}
+    .page-title{font-family:var(--font-display); font-size:21px; font-weight:700; letter-spacing:.02em;}
+    .page-title .accent{color:var(--red-500);}
+    .page-sub{font-size:13px; color:var(--text-2); margin-top:3px;}
+    .topbar-right{display:flex; align-items:center; gap:14px;}
+    .live-pill{display:flex; align-items:center; gap:7px; padding:7px 13px; border-radius:999px;
+      background:rgba(63,226,160,.1); border:1px solid rgba(63,226,160,.35); font-family:var(--font-mono); font-size:12.5px; font-weight:500; color:var(--status-ok);}
+    .live-dot{width:6px;height:6px;border-radius:50%;background:var(--status-ok); box-shadow:0 0 8px 1px var(--status-ok);}
+    .clock{font-family:var(--font-mono); font-size:13.5px; color:var(--text-2);}
+    .icon-btn{position:relative; width:38px;height:38px;border-radius:10px; display:flex;align-items:center;justify-content:center;
+      color:var(--text-2); background:var(--glass-a); border:1px solid var(--border-soft);}
+    .icon-btn svg{width:18px;height:18px;}
+    .badge{position:absolute; top:-5px; right:-5px; background:var(--red-500); color:#100708; font-size:10px; font-weight:700;
+      font-family:var(--font-mono); border-radius:999px; min-width:16px; height:16px; display:flex;align-items:center;justify-content:center;
+      box-shadow:0 0 8px -1px var(--red-500);}
+    .avatar{width:36px;height:36px;border-radius:10px; background:linear-gradient(135deg,#3a2226,#1c1113); border:1px solid var(--border-soft);
+      display:flex;align-items:center;justify-content:center; font-family:var(--font-mono); font-size:12px; color:var(--text-1);}
+
+    /* ---- content: map dominant + slim side rail ---- */
+    .content{flex:1; overflow:hidden; padding:20px 24px; display:flex; gap:16px; min-height:0;}
+    .map-panel{flex:1; min-width:0; display:flex; flex-direction:column;}
+    .sidebar-rail{width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:16px; min-height:0;}
+
+    .panel-head{padding:18px 20px 12px;}
+    .panel-title{font-family:var(--font-body); font-size:15px; font-weight:600; letter-spacing:.01em; color:var(--text-1);}
+    .panel-sub{font-size:12px; color:var(--text-2); margin-top:3px;}
+    .legend-row{display:flex; gap:16px; flex-wrap:wrap; padding:10px 20px 14px; border-top:1px solid var(--border-soft); margin-top:10px;}
+    .legend-item{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-2);}
+    .legend-swatch{width:14px;height:3px;border-radius:2px; flex-shrink:0;}
+    .legend-swatch.dashed{height:0; border-top:2px dashed var(--text-3); background:none;}
+    .legend-diamond{width:9px;height:9px;transform:rotate(45deg); background:var(--red-600); border:1px solid var(--border-red); flex-shrink:0;}
+
+    /* ---- KPI mini grid ---- */
+    .kpi-mini-grid{display:grid; grid-template-columns:1fr 1fr;}
+    .kpi-mini{padding:14px 16px; display:flex; flex-direction:column; gap:5px; border-right:1px solid var(--border-soft); border-bottom:1px solid var(--border-soft);}
+    .kpi-mini:nth-child(2n){border-right:none;}
+    .kpi-mini:nth-child(3), .kpi-mini:nth-child(4){border-bottom:none;}
+    .kpi-mini-label{font-size:11px; color:var(--text-2); letter-spacing:.01em; text-transform:uppercase; font-weight:500;}
+    .kpi-mini-value{font-family:var(--font-mono); font-size:20px; font-weight:500; line-height:1.1;}
+    .kpi-mini-value .unit{font-size:11px; color:var(--text-3); font-weight:400; margin-left:3px;}
+    .kpi-mini-delta{font-size:11px; font-family:var(--font-mono);}
+    .d-ok{color:var(--status-ok);} .d-warn{color:var(--status-warn);} .d-err{color:var(--status-err);}
+
+    /* ================= PROCESS FLOW MAP ================= */
+    .map-body{flex:1; margin:0 16px 16px; border-radius:var(--radius-md); position:relative; overflow:hidden;
+      background-color:#170e0f;
+      background-image:
+        linear-gradient(30deg, rgba(255,80,80,.026) 12%, transparent 12.5%, transparent 87%, rgba(255,80,80,.026) 87.5%, rgba(255,80,80,.026)),
+        linear-gradient(150deg, rgba(255,80,80,.026) 12%, transparent 12.5%, transparent 87%, rgba(255,80,80,.026) 87.5%, rgba(255,80,80,.026)),
+        linear-gradient(30deg, rgba(255,80,80,.026) 12%, transparent 12.5%, transparent 87%, rgba(255,80,80,.026) 87.5%, rgba(255,80,80,.026)),
+        linear-gradient(150deg, rgba(255,80,80,.026) 12%, transparent 12.5%, transparent 87%, rgba(255,80,80,.026) 87.5%, rgba(255,80,80,.026)),
+        linear-gradient(60deg, rgba(255,80,80,.022) 25%, transparent 25.5%, transparent 75%, rgba(255,80,80,.022) 75%, rgba(255,80,80,.022)),
+        linear-gradient(60deg, rgba(255,80,80,.022) 25%, transparent 25.5%, transparent 75%, rgba(255,80,80,.022) 75%, rgba(255,80,80,.022));
+      background-size:52px 90px; background-position:0 0, 0 0, 26px 45px, 26px 45px, 0 0, 26px 45px;
+      border:1px solid var(--border-soft);}
+
+    .node{position:absolute;}
+    .ring{position:absolute; border-radius:18px; border:1.5px solid var(--red-500); box-shadow:0 0 26px 2px rgba(255,59,59,.5);
+      pointer-events:none; transition:opacity .2s; z-index:1;}
+
+    .flow-node{position:absolute; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+      background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02)); border:1px solid var(--border-soft);
+      border-radius:12px; padding:10px 10px; text-align:center;}
+    .flow-node .fn-icon{width:20px;height:20px; color:var(--red-500); flex-shrink:0;}
+    .fn-title{font-size:12.5px; font-weight:600; color:var(--text-1); line-height:1.25;}
+    .fn-sub{font-size:11px; color:var(--text-3); font-family:var(--font-mono); line-height:1.35;}
+    .flow-node.dock{border-style:dashed; border-color:var(--border-red); background:rgba(255,59,59,.05);}
+    .flow-node.dock-out{border-style:dashed; border-color:rgba(255,138,82,.45); background:rgba(255,122,61,.05);}
+    .flow-node.dock-out .fn-icon{color:var(--ember);}
+    .flow-node.storage{border-color:rgba(255,204,77,.4);}
+    .flow-node.storage .fn-icon{color:var(--status-warn);}
+    .fn-occ{width:80%; height:5px; border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden; margin-top:1px;}
+    .fn-occ-fill{height:100%; width:78%; background:linear-gradient(90deg,#ffb35a,var(--status-warn));}
+    .flow-node.transfer{border-style:dashed; border-color:var(--text-3); background:rgba(255,255,255,.02);}
+    .flow-node.transfer .fn-icon{color:var(--text-2);}
+    .flow-node.merge{border-color:rgba(255,138,82,.45);}
+    .flow-node.merge .fn-icon{color:var(--ember);}
+
+    .flow-diamond{position:absolute; z-index:2; width:64px;height:64px; transform:rotate(45deg);
+      background:linear-gradient(135deg,var(--red-600),var(--bg-panel)); border:1px solid var(--border-red);
+      box-shadow:0 0 16px -2px rgba(255,59,59,.5); display:flex; align-items:center; justify-content:center;}
+    .flow-diamond svg{width:20px;height:20px; color:var(--text-1); transform:rotate(-45deg);}
+
+    .fn-badge{position:absolute; z-index:2; font-family:var(--font-mono); font-size:11px; font-weight:600; color:var(--text-1);
+      background:rgba(10,7,8,.72); border:1px solid var(--border-soft); border-radius:7px; padding:5px 9px; white-space:nowrap;
+      display:flex; align-items:center; gap:8px;}
+    .fn-badge .n{color:var(--red-500);}
+    .fn-badge.out .n{color:var(--ember);}
+    .mini-spark{display:flex; gap:2px; align-items:flex-end; height:12px;}
+    .mini-spark span{width:3px; border-radius:1px; background:var(--red-500); opacity:.8;}
+    .mini-spark.out span{background:var(--ember);}
+
+    .lane-label{position:absolute; z-index:2; font-size:10.5px; font-weight:600; color:var(--text-3);
+      text-transform:uppercase; letter-spacing:.05em;}
+    .flow-caption{position:absolute; z-index:2; font-size:11px; color:var(--text-2); font-weight:500;
+      background:rgba(10,7,8,.55); padding:3px 8px; border-radius:5px; white-space:nowrap;}
+
+    .flow-line{position:absolute; height:2px; background:linear-gradient(90deg, var(--red-600), var(--red-500));
+      box-shadow:0 0 6px 0 rgba(255,59,59,.4); z-index:1;}
+    .flow-line.ember{background:linear-gradient(90deg, var(--ember), #ffb35a); box-shadow:0 0 6px 0 rgba(255,122,61,.4);}
+    .chevron{position:absolute; z-index:1; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent;
+      border-left:6px solid var(--red-500); filter:drop-shadow(0 0 3px rgba(255,59,59,.6));}
+    .chevron.ember{border-left-color:var(--ember);}
+    .item-token{position:absolute; z-index:1; width:8px;height:8px;border-radius:50%; background:var(--red-500);
+      box-shadow:0 0 8px 2px rgba(255,59,59,.65);}
+    .item-token.ember{background:var(--ember); box-shadow:0 0 8px 2px rgba(255,122,61,.6);}
+
+    /* ---- order panel (in side rail) ---- */
+    .order-panel{flex:1; min-height:0; display:flex; flex-direction:column;}
+    .tabs{display:flex; gap:6px; padding:0 20px 14px;}
+    .tab{font-size:12.5px; font-weight:500; padding:7px 13px; border-radius:8px; color:var(--text-2); background:transparent; font-family:var(--font-body);}
+    .tab.active{color:var(--text-1); background:var(--glass-a); border:1px solid var(--border-soft); font-weight:600;}
+    .order-list{flex:1; overflow-y:auto; padding:0 16px 16px; display:flex; flex-direction:column; gap:12px;}
+    .order-card{border-radius:var(--radius-md); background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.016));
+      border:1px solid var(--border-soft); padding:16px 18px; display:flex; flex-direction:column; gap:12px; cursor:pointer;}
+    .oc-top{display:flex; align-items:center; justify-content:space-between;}
+    .oc-id{font-family:var(--font-mono); font-size:14.5px; font-weight:500; color:var(--text-1);}
+    .oc-priority{font-size:11px; font-weight:600; padding:4px 10px; border-radius:999px; letter-spacing:.02em;}
+    .prio-high{color:#ff8a94; background:rgba(255,45,107,.14); border:1px solid rgba(255,45,107,.35);}
+    .prio-normal{color:var(--text-2); background:rgba(255,255,255,.06); border:1px solid var(--border-soft);}
+    .oc-dest{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--text-2);}
+    .oc-dest svg{width:13px;height:13px; color:var(--text-3); flex-shrink:0;}
+    .oc-status-row{display:flex; align-items:center; justify-content:space-between;}
+    .oc-status{display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500; font-family:var(--font-mono);}
+    .status-dot{width:8px;height:8px;border-radius:50%; flex-shrink:0;}
+    .equip-chip{font-size:11px; font-family:var(--font-mono); color:var(--text-1); background:rgba(255,255,255,.06);
+      border:1px solid var(--border-soft); border-radius:6px; padding:3px 9px;}
+    .progress-track{height:6px;border-radius:999px; background:rgba(255,255,255,.08); overflow:hidden;}
+    .progress-fill{height:100%; border-radius:999px; background:linear-gradient(90deg,var(--red-600),var(--red-500));}
+    .oc-foot{display:flex; gap:8px; margin-top:2px;}
+    .oc-btn{flex:1; height:36px; border-radius:8px; font-size:12px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:5px;
+      font-family:var(--font-body);}
+    .oc-btn svg{width:13px;height:13px;}
+    .btn-execute{background:linear-gradient(135deg,var(--red-500),var(--red-700)); color:#150506; box-shadow:0 4px 14px -4px rgba(255,59,59,.65);}
+    .btn-pause{background:transparent; border:1px solid var(--border-soft); color:var(--text-2);}
+    .btn-reassign{background:transparent; color:var(--text-2);}
+  </style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M12 2 20.5 7V17L12 22 3.5 17V7Z"/><circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-orders" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3V2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="M8 10h8M8 14h8M8 18h5"/></symbol>
+    <symbol id="i-equip" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-log" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><line x1="12" y1="15" x2="17" y2="15"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-reassign" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-robot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="10" rx="3"/><circle cx="9" cy="13" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="13" r="1.3" fill="currentColor" stroke="none"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1.1"/></symbol>
+    <symbol id="i-crane" viewBox="0 0 24 24"><path d="M4 21h16M6 21V9l6-5 6 5v12"/><path d="M12 4v6M9 10h6"/></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><rect x="2" y="7" width="12" height="9" rx="1.2"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="6.5" cy="18" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="18" r="1.6" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-rack" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1"/><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/></symbol>
+    <symbol id="i-tote" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><path d="M4 12h5"/><path d="M9 12L18 5M9 12L18 19"/><circle cx="9" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
+  </defs>
+</svg>
+
+<div class="root">
+  <div class="grain"></div>
+
+  <nav class="nav">
+    <div class="nav-logo"><div class="mark"><svg viewBox="0 0 24 24"><use href="#i-bolt"/></svg></div></div>
+    <div class="nav-items">
+      <div class="nav-item active"><svg><use href="#i-grid"/></svg><span class="lbl">Dashboard</span></div>
+      <div class="nav-item"><svg><use href="#i-map"/></svg><span class="lbl">Warehouse<br>Map</span></div>
+      <div class="nav-item"><svg><use href="#i-orders"/></svg><span class="lbl">Order<br>Management</span></div>
+      <div class="nav-item"><svg><use href="#i-equip"/></svg><span class="lbl">Equipment<br>Control</span></div>
+      <div class="nav-item"><svg><use href="#i-log"/></svg><span class="lbl">Simulation<br>Log</span></div>
+    </div>
+    <div class="nav-foot">
+      <div class="nav-item"><svg><use href="#i-settings"/></svg><span class="lbl">Settings</span></div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="page-title">DASHBOARD <span class="accent">·</span> 물류센터 A동</div>
+        <div class="page-sub">실시간 관제 · Zone 1-4 통합 모니터링</div>
+      </div>
+      <div class="topbar-right">
+        <div class="live-pill"><span class="live-dot"></span>LIVE SYNC</div>
+        <div class="clock">2026-09-01 14:32:07</div>
+        <div class="icon-btn"><svg><use href="#i-bell"/></svg><span class="badge">3</span></div>
+        <div class="avatar">OP</div>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- ================= MAP: dominant process-flow diagram (~74% width) ================= -->
+      <div class="glass map-panel">
+        <div class="panel-head">
+          <div class="panel-title">ORDER PROCESS FLOW · 오더 처리 흐름도</div>
+          <div class="panel-sub">설비를 처리 순서대로 배치 — 각 설비가 어떻게 OUT 되어 다음 설비로 IN 되는지 표시</div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-item"><span class="legend-swatch" style="background:var(--red-500)"></span>입고 흐름 (Stocking)</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:var(--ember)"></span>출고 흐름 (Order Fulfillment)</div>
+          <div class="legend-item"><span class="legend-diamond"></span>분기/합류 지점</div>
+          <div class="legend-item"><span class="legend-swatch dashed"></span>도크 (Dock)</div>
+          <div class="legend-item">◧ 좌측 IN · 우측 OUT (노드 내 표기)</div>
+        </div>
+
+        <div class="map-body">
+          <!-- lane labels -->
+          <div class="lane-label" style="left:228px; top:32px;">보관 인출 경로 · CRANE → RACK</div>
+          <div class="lane-label" style="left:228px; top:576px;">AMR 이송 경로 · MOBILE PICK</div>
+
+          <!-- 1. INBOUND DOCK -->
+          <div class="flow-node dock" style="left:16px; top:266px; width:112px; height:88px;">
+            <svg class="fn-icon"><use href="#i-truck"/></svg>
+            <div class="fn-title">INBOUND<br>DOCK</div>
+            <div class="fn-sub">OUT→분류</div>
+          </div>
+          <div class="fn-badge" style="left:10px; top:362px;"><span class="n">IN 324</span>건 · 대기 3
+            <span class="mini-spark"><span style="height:4px"></span><span style="height:7px"></span><span style="height:6px"></span><span style="height:10px"></span></span>
+          </div>
+
+          <!-- edge: dock -> junction -->
+          <div class="flow-line" style="left:128px; top:309px; width:18px;"></div>
+          <div class="item-token" style="left:134px; top:306px;"></div>
+
+          <!-- 2. SORT JUNCTION -->
+          <div class="flow-diamond" style="left:146px; top:278px;"><svg><use href="#i-branch"/></svg></div>
+          <div class="flow-caption" style="left:150px; top:404px;">분기: SKU / 오더 유형</div>
+
+          <!-- edges: junction -> crane / amr -->
+          <div class="flow-line" style="left:223px; top:310px; width:200px; transform:rotate(-88.6deg); transform-origin:0 0;"></div>
+          <div class="flow-line" style="left:223px; top:310px; width:210px; transform:rotate(88.6deg); transform-origin:0 0;"></div>
+          <div class="chevron" style="left:222px; top:150px; transform:rotate(-90deg);"></div>
+          <div class="chevron" style="left:222px; top:475px; transform:rotate(90deg);"></div>
+
+          <!-- 3a. STACKER CRANE (top lane) -->
+          <div class="flow-node" style="left:228px; top:64px; width:124px; height:92px;">
+            <svg class="fn-icon"><use href="#i-crane"/></svg>
+            <div class="fn-title">STACKER<br>CRANE-02</div>
+            <div class="fn-sub">IN←분류 OUT→랙</div>
+          </div>
+          <div class="ring" id="ring-crane" style="left:220px; top:56px; width:140px; height:108px; opacity:{{craneRing}};"></div>
+
+          <!-- edge: crane -> rack -->
+          <div class="flow-line" style="left:352px; top:110px; width:18px;"></div>
+          <div class="item-token" style="left:356px; top:107px;"></div>
+
+          <!-- 4. STORAGE RACK -->
+          <div class="flow-node storage" style="left:370px; top:54px; width:140px; height:104px;">
+            <svg class="fn-icon"><use href="#i-rack"/></svg>
+            <div class="fn-title">STORAGE RACK<br>· B-12</div>
+            <div class="fn-sub">IN←크레인 OUT→피킹</div>
+            <div class="fn-occ"><div class="fn-occ-fill"></div></div>
+          </div>
+          <div class="ring" id="ring-rack" style="left:362px; top:46px; width:156px; height:120px; opacity:{{rackRing}};"></div>
+
+          <!-- 3b. AMR ZONE (bottom lane) -->
+          <div class="flow-node" style="left:228px; top:474px; width:124px; height:92px;">
+            <svg class="fn-icon"><use href="#i-robot"/></svg>
+            <div class="fn-title">AMR ZONE<br>· 04 / 07</div>
+            <div class="fn-sub">IN←분기 OUT→피킹</div>
+          </div>
+          <div class="ring" id="ring-amr" style="left:220px; top:466px; width:140px; height:108px; opacity:{{amrRing}};"></div>
+
+          <!-- edges: rack -> pick (ember) / amr -> pick (ember) -->
+          <div class="flow-line ember" style="left:510px; top:106px; width:180px; transform:rotate(84.3deg); transform-origin:0 0;"></div>
+          <div class="flow-line ember" style="left:352px; top:520px; width:255px; transform:rotate(-46.4deg); transform-origin:0 0;"></div>
+          <div class="chevron ember" style="left:522px; top:265px; transform:rotate(84deg);"></div>
+          <div class="chevron ember" style="left:510px; top:345px; transform:rotate(-46deg);"></div>
+          <div class="item-token ember" style="left:518px; top:190px;"></div>
+          <div class="item-token ember" style="left:433px; top:435px;"></div>
+          <div class="flow-caption" style="left:520px; top:368px;">합류: 피킹 완료</div>
+
+          <!-- 5. PICK STATION (merge) -->
+          <div class="flow-node merge" style="left:528px; top:262px; width:132px; height:96px;">
+            <svg class="fn-icon"><use href="#i-tote"/></svg>
+            <div class="fn-title">PICK STATION</div>
+            <div class="fn-sub">IN←랙/AMR OUT→환승</div>
+          </div>
+
+          <!-- edge: pick -> transfer -->
+          <div class="flow-line ember" style="left:660px; top:309px; width:8px;"></div>
+
+          <!-- 6. TRANSFER DOCK (경유 도크) -->
+          <div class="flow-node transfer" style="left:668px; top:264px; width:120px; height:92px;">
+            <svg class="fn-icon"><use href="#i-clock"/></svg>
+            <div class="fn-title">TRANSFER DOCK<br>· 환승 도크</div>
+            <div class="fn-sub">IN←피킹 OUT→출고</div>
+          </div>
+
+          <!-- edge: transfer -> outbound -->
+          <div class="flow-line ember" style="left:788px; top:309px; width:14px;"></div>
+          <div class="item-token ember" style="left:791px; top:306px;"></div>
+
+          <!-- 7. OUTBOUND DOCK -->
+          <div class="flow-node dock-out" style="left:802px; top:266px; width:110px; height:88px;">
+            <svg class="fn-icon"><use href="#i-truck"/></svg>
+            <div class="fn-title">OUTBOUND<br>DOCK</div>
+            <div class="fn-sub">IN←환승</div>
+          </div>
+          <div class="fn-badge out" style="left:768px; top:362px;"><span class="n">OUT 287</span>건 · 대기 2
+            <span class="mini-spark out"><span style="height:6px"></span><span style="height:9px"></span><span style="height:5px"></span><span style="height:11px"></span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= SIDE RAIL: compact KPI + order allocation ================= -->
+      <div class="sidebar-rail">
+        <div class="glass kpi-mini-grid">
+          <div class="kpi-mini">
+            <span class="kpi-mini-label">Throughput</span>
+            <span class="kpi-mini-value">12,480<span class="unit">건</span></span>
+            <span class="kpi-mini-delta d-ok">▲ 8.2%</span>
+          </div>
+          <div class="kpi-mini">
+            <span class="kpi-mini-label">Equip Online</span>
+            <span class="kpi-mini-value">38<span class="unit">/42</span></span>
+            <span class="kpi-mini-delta d-ok">90.5%</span>
+          </div>
+          <div class="kpi-mini">
+            <span class="kpi-mini-label">Queued</span>
+            <span class="kpi-mini-value">16<span class="unit">건</span></span>
+            <span class="kpi-mini-delta d-warn">대기 4.2분</span>
+          </div>
+          <div class="kpi-mini">
+            <span class="kpi-mini-label">Alerts</span>
+            <span class="kpi-mini-value" style="color:var(--status-err)">2</span>
+            <span class="kpi-mini-delta d-err">확인 필요</span>
+          </div>
+        </div>
+
+        <div class="glass order-panel">
+          <div class="panel-head" style="padding:16px 20px 10px;">
+            <div class="panel-title">ORDER ALLOCATION</div>
+            <div class="panel-sub">설비 할당 · 실행 제어</div>
+          </div>
+          <div class="tabs">
+            <div class="tab active">전체 24</div>
+            <div class="tab">진행중 9</div>
+            <div class="tab">대기 16</div>
+          </div>
+          <div class="order-list">
+            <sc-for list="{{orders}}" as="o" hint-placeholder-count="3">
+              <div class="order-card" onClick="{{o.onClick}}" style="box-shadow:{{o.cardShadow}};">
+                <div class="oc-top">
+                  <span class="oc-id">{{o.id}}</span>
+                  <span class="oc-priority {{o.prioClass}}">{{o.priority}}</span>
+                </div>
+                <div class="oc-dest"><svg><use href="#i-pin"/></svg>{{o.dest}}</div>
+                <div class="oc-status-row">
+                  <div class="oc-status"><span class="status-dot" style="background:{{o.statusColor}}; box-shadow:0 0 7px 1px {{o.statusColor}};"></span>{{o.status}}</div>
+                  <span class="equip-chip">{{o.equipTag}}</span>
+                </div>
+                <div class="progress-track"><div class="progress-fill" style="width:{{o.progress}}%;"></div></div>
+                <div class="oc-foot">
+                  <button class="oc-btn btn-execute"><svg><use href="#i-play"/></svg>Execute</button>
+                  <button class="oc-btn btn-pause"><svg><use href="#i-pause"/></svg>Pause</button>
+                  <button class="oc-btn btn-reassign"><svg><use href="#i-reassign"/></svg>Reassign</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { selected: 'amr' };
+  }
+  renderVals() {
+    const sel = this.state.selected;
+    const pick = (id) => () => this.setState({ selected: id });
+    const ringFor = (id) => (sel === id ? 1 : 0);
+    const glow = 'inset 0 0 0 1px rgba(255,59,59,.5), 0 0 0 1px var(--red-500), 0 0 22px -6px rgba(255,59,59,.85)';
+    const none = '0 1px 0 rgba(255,255,255,.03) inset';
+    const raw = [
+      { id: 'ORD-48213', priority: 'HIGH', prioClass: 'prio-high', dest: 'AMR Zone 경로 · Zone A', status: 'ACTIVE', statusColor: 'var(--status-ok)', equipTag: 'AMR ZONE', progress: 72, equip: 'amr' },
+      { id: 'ORD-48219', priority: 'NORMAL', prioClass: 'prio-normal', dest: 'Crane→Rack 경로 · Zone B', status: 'QUEUED', statusColor: 'var(--status-warn)', equipTag: 'CRANE-02', progress: 18, equip: 'crane' },
+      { id: 'ORD-48224', priority: 'HIGH', prioClass: 'prio-high', dest: 'Storage Rack · Zone C', status: 'ERROR', statusColor: 'var(--status-err)', equipTag: 'RACK B-12', progress: 46, equip: 'rack' },
+    ];
+    const orders = raw.map((o) => ({
+      ...o,
+      cardShadow: sel === o.equip ? glow : none,
+      onClick: pick(o.equip),
+    }));
+    return {
+      orders,
+      amrRing: ringFor('amr'),
+      craneRing: ringFor('crane'),
+      rackRing: ringFor('rack'),
+    };
+  }
+}
+</script>
+</body>
+</html>
