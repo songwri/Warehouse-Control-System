@@ -112,8 +112,10 @@ function floatLabel(text, x, y, cls = '') {
 
 // ---------- inbound scenario ----------
 async function spawnInboundTruck() {
-  const isMixedCarton = Math.random() < 0.5;
-  const group = isMixedCarton ? 'inbound-auto' : 'inbound-general';
+  const isMixedCarton = Math.random() < 0.6;
+  const box = isMixedCarton ? randomBoxDims() : null;
+  const useRobotArm = isMixedCarton && box.eligible;
+  const group = useRobotArm ? 'inbound-auto' : 'inbound-general';
 
   let dock = null;
   for (let i = 0; i < 8 && !dock; i++) {
@@ -128,12 +130,19 @@ async function spawnInboundTruck() {
   const itemCount = randomInt(2, 4);
   const items = Array.from({ length: itemCount }, () => randomFrom(SKU_POOL));
 
-  Log.push(`📥 ${asnId} 입고알림 수신 (${carrier}) · ${isMixedCarton ? '혼합카톤 적재' : '팔레트 단위 적재'}`, 'asn');
-  Log.push(`🧭 ${asnId} → ${DOCK_GROUP_LABEL[group]} ${dock.id} 도크 자동배분`, 'decision');
+  if (isMixedCarton) {
+    Log.push(`📥 ${asnId} 입고알림 수신 (${carrier}) · 혼합카톤 적재 (대표박스 ${box.l}×${box.w}×${box.h}mm · ${box.weight}kg)`, 'asn');
+    Log.push(box.eligible
+      ? `🧭 ${asnId} 박스규격 판정: 로봇팔 처리기준(≤${INBOUND_BOX_SPEC.maxL}×${INBOUND_BOX_SPEC.maxW}×${INBOUND_BOX_SPEC.maxH}mm·≤${INBOUND_BOX_SPEC.maxWeightKg}kg) 충족 → 자동입고장치존 ${dock.id} 배정`
+      : `🧭 ${asnId} 박스규격 기준 초과 → 일반 하차장 ${dock.id} 배정`, 'decision');
+  } else {
+    Log.push(`📥 ${asnId} 입고알림 수신 (${carrier}) · 표준 파렛트(${STANDARD_PALLET_MM}mm) 랩핑 완제품 적재`, 'asn');
+    Log.push(`🧭 ${asnId} → 일반 하차장 ${dock.id} 자동배분`, 'decision');
+  }
 
-  const truck = makeTruck(isMixedCarton ? 'auto' : 'general');
+  const truck = makeTruck(useRobotArm ? 'auto' : 'general');
   WarehouseMap.layers.trucks.appendChild(truck);
-  registerEntity(truck, { title: asnId, lines: [`운송사: ${carrier}`, `하차유형: ${isMixedCarton ? '자동입고장치존(로봇팔)' : '일반 하차장'}`, `배정도크: ${dock.id}`, `품목수: ${itemCount}`] });
+  registerEntity(truck, { title: asnId, lines: [`운송사: ${carrier}`, `하차유형: ${useRobotArm ? '자동입고장치존(로봇팔)' : '일반 하차장'}`, `배정도크: ${dock.id}`, `품목수: ${itemCount}`, ...(box ? [`대표박스: ${box.l}×${box.w}×${box.h}mm · ${box.weight}kg`] : [])] });
 
   const side = dock.x < LAYOUT.viewBox.w / 2 ? -1 : 1;
   await moveAlongPath(truck, [{ x: dock.x + side * 340, y: dock.y }, { x: dock.x + 12, y: dock.y }], 1300);
@@ -142,13 +151,11 @@ async function spawnInboundTruck() {
   for (const item of items) {
     const pallet = makePallet(item.unit);
     WarehouseMap.layers.pallets.appendChild(pallet);
-    registerEntity(pallet, { title: item.sku, lines: [item.name, `단위: ${item.unit}`, `카테고리: ${item.category}`, `출처: ${asnId}`] });
+    registerEntity(pallet, { title: item.sku, lines: [item.name, `단위: ${item.unit}`, `회전율: ${item.tier}등급`, `카테고리: ${item.category}`, `출처: ${asnId}`] });
 
     const dockPt = { x: dock.x, y: dock.y };
-    if (isMixedCarton) {
+    if (useRobotArm) {
       await moveAlongPath(pallet, [dockPt, LAYOUT.robotArm], 700);
-      const arm = pallet;
-      WarehouseMap.layers.pallets.querySelectorAll('.robot-arm-active');
       document.querySelector('.robot-arm')?.classList.add('active');
       await wait(260);
       document.querySelector('.robot-arm')?.classList.remove('active');
@@ -159,7 +166,7 @@ async function spawnInboundTruck() {
 
     const toClimber = item.unit === 'PCS';
     floatLabel(toClimber ? 'PCS → HAIPICK' : 'PLT → SHUTTLE/RACK', LAYOUT.inboundHub.x, LAYOUT.inboundHub.y - 34, toClimber ? 'accent-pcs' : 'accent-plt');
-    Log.push(`🧠 ${item.sku} 보관존 판정: ${toClimber ? 'PCS 단위 → HAIPICK Climber' : '팔레트 단위 → 4-Way Shuttle/팔레트랙'}`, 'decision');
+    Log.push(`🧠 ${item.sku} 보관존 판정(회전율 ${item.tier}등급): ${toClimber ? 'PCS 단위 → HAIPICK Climber' : '팔레트 단위 → 4-Way Shuttle/팔레트랙'}`, 'decision');
 
     if (toClimber) {
       await moveAlongPath(pallet, [LAYOUT.inboundHub, { x: LAYOUT.climberZone.x - 20, y: LAYOUT.climberZone.y + LAYOUT.climberZone.h / 2 }], 750);
@@ -200,36 +207,87 @@ async function spawnInboundTruck() {
 }
 
 // ---------- outbound / order scenario ----------
+async function dispatchOutbound(orderId, dockLabelLines, itemEl, itemStartPt) {
+  let dock = null;
+  for (let i = 0; i < 8 && !dock; i++) {
+    dock = WarehouseMap.pickDock('outbound');
+    if (!dock) await wait(600);
+  }
+  if (!dock) { Log.push(`⚠️ ${orderId} 출고도크 대기 (전 도크 사용중)`, 'warn'); itemEl?.remove(); return; }
+
+  Log.push(`🧭 ${orderId} → 출고도크 ${dock.id} 자동배정`, 'decision');
+  if (itemEl) {
+    await moveAlongPath(itemEl, [itemStartPt, { x: dock.x - 6, y: dock.y }], 900);
+    itemEl.remove();
+  }
+
+  const truck = makeTruck('outbound');
+  WarehouseMap.layers.trucks.appendChild(truck);
+  registerEntity(truck, { title: orderId, lines: [`출고도크: ${dock.id}`, ...dockLabelLines] });
+  await moveAlongPath(truck, [{ x: dock.x + 340, y: dock.y }, { x: dock.x + 12, y: dock.y }], 1100);
+  await wait(300);
+  Log.push(`🚚 ${orderId} 출고 완료 · ${dock.id} 도크 출발`, 'success');
+  Stats.outbound++;
+  UI.bumpStat('outbound');
+  await moveAlongPath(truck, [{ x: dock.x + 12, y: dock.y }, { x: dock.x + 340, y: dock.y }], 1000);
+  truck.remove();
+  WarehouseMap.releaseDock(dock.id);
+}
+
 async function spawnOrder() {
   Stats.orderCount++;
   const orderId = `ORD-${pad(Stats.orderCount, 5)}`;
   const sku = randomFrom(SKU_POOL);
   const qty = randomInt(1, 6);
+  const lineCount = randomLineCount();
+  const isFullPallet = sku.unit === 'PLT' && lineCount === 1 && Math.random() < 0.18;
 
-  Log.push(`🛒 이커머스 오더 ${orderId} 접수 · ${sku.name} x${qty}`, 'order');
+  Log.push(`🛒 이커머스 오더 ${orderId} 접수 · ${sku.name} x${qty} · 라인수 ${lineCount}${isFullPallet ? ' · 팔레트 단위 통짜출고' : ''}`, 'order');
   await wait(260);
 
+  // ---- Full-pallet order: skip piece-picking entirely, rack -> dock direct ----
+  if (isFullPallet) {
+    Log.push(`🧠 ${orderId} 판정: 팔레트 단위 통짜출고 → 피킹 생략, 랙 → 도크 직송`, 'decision');
+    floatLabel('FULL PALLET DIRECT', LAYOUT.orderHub.x, LAYOUT.orderHub.y - 34, 'accent-plt');
+
+    const cell = WarehouseMap.freeShuttleCell();
+    const startPt = cell || { x: LAYOUT.shuttleZone.x + LAYOUT.shuttleZone.w / 2, y: LAYOUT.shuttleZone.y + LAYOUT.shuttleZone.h / 2 };
+    const pallet = makePallet('PLT');
+    WarehouseMap.layers.pallets.appendChild(pallet);
+    registerEntity(pallet, { title: orderId, lines: [sku.name, '수량: 1 PLT', '처리: 팔레트 직송 (피킹 생략)', '스마트글라스: 불필요'] });
+    pallet.setAttribute('transform', `translate(${startPt.x},${startPt.y})`);
+    await wait(200);
+    await moveAlongPath(pallet, [startPt, { x: LAYOUT.shuttleZone.x - 12, y: startPt.y }], 500);
+
+    await dispatchOutbound(orderId, [`${sku.name} x1 PLT`, '처리: 팔레트 직송'], pallet, { x: LAYOUT.shuttleZone.x - 12, y: startPt.y });
+    return;
+  }
+
   const isPcs = sku.unit === 'PCS';
-  const method = isPcs ? 'haipick' : (Math.random() < 0.5 ? 'cart' : 'amr');
+  const method = isPcs ? 'haipick' : ((lineCount >= 3 || sku.tier === 'A') ? 'amr' : 'cart');
   const needsGlasses = method !== 'haipick';
   const methodLabel = { haipick: 'HAIPICK Climber 피킹', cart: '피킹카트 피킹', amr: 'AMR 피킹' }[method];
+  const reason = isPcs
+    ? `HAIPICK 보관 SKU (회전율 ${sku.tier}등급)`
+    : `팔레트랙 보관, 라인수 ${lineCount} · 회전율 ${sku.tier}등급`;
 
-  Log.push(`🧠 ${orderId} 피킹수단 할당: ${methodLabel}${needsGlasses ? ' · 스마트글라스(오토검수) 배정' : ' · 스마트글라스 불필요'}`, 'decision');
+  Log.push(`🧠 ${orderId} 피킹수단 할당: ${reason} → ${methodLabel}${needsGlasses ? ' · 스마트글라스(오토검수) 배정' : ' · 스마트글라스 불필요'}`, 'decision');
   floatLabel(methodLabel, LAYOUT.orderHub.x, LAYOUT.orderHub.y - 34, 'accent-order');
 
   const lane = LAYOUT.pickLanes[method];
+  let carrier;
 
   if (method === 'haipick') {
     const cell = WarehouseMap.freeClimberCell();
     const pickPt = cell || { x: LAYOUT.climberZone.x + LAYOUT.climberZone.w / 2, y: LAYOUT.climberZone.y + LAYOUT.climberZone.h / 2 };
-    await moveAlongPath(WarehouseMap.layers.climberBot, [{ x: LAYOUT.climberZone.x - 8, y: pickPt.y }], 700);
+    WarehouseMap.layers.climberBot.setAttribute('transform', `translate(${LAYOUT.climberZone.x - 8},${pickPt.y})`);
     const item = makePallet('PCS');
     WarehouseMap.layers.pallets.appendChild(item);
     registerEntity(item, { title: orderId, lines: [sku.name, `수량: ${qty}`, '피킹수단: HAIPICK Climber', '스마트글라스: 불필요'] });
     item.setAttribute('transform', `translate(${pickPt.x},${pickPt.y})`);
     await wait(250);
-    await moveAlongPath(item, [pickPt, lane, LAYOUT.packStation], 1400);
-    item.remove();
+    await moveAlongPath(item, [pickPt, lane], 900);
+    carrier = item;
   } else {
     const agent = makeAgent(method);
     WarehouseMap.layers.agents.appendChild(agent);
@@ -241,37 +299,31 @@ async function spawnOrder() {
     const pickPt = cell || { x: LAYOUT.shuttleZone.x + LAYOUT.shuttleZone.w / 2, y: LAYOUT.shuttleZone.y + LAYOUT.shuttleZone.h / 2 };
     await moveAlongPath(agent, [lane, { x: LAYOUT.shuttleZone.x - 12, y: pickPt.y }, pickPt], 1300);
     await wait(260);
-    await moveAlongPath(agent, [pickPt, { x: LAYOUT.shuttleZone.x - 12, y: pickPt.y }, lane, LAYOUT.packStation], 1500);
-    agent.remove();
+    await moveAlongPath(agent, [pickPt, { x: LAYOUT.shuttleZone.x - 12, y: pickPt.y }, lane], 1300);
+    carrier = agent;
   }
+
+  // ---- Multi-line orders consolidate through the Libiao 3D Sorter ----
+  if (lineCount >= 2) {
+    const sz = LAYOUT.sorterZone;
+    const sorterIn = { x: sz.x, y: sz.y + sz.h / 2 };
+    const sorterOut = { x: sz.x + sz.w, y: sz.y + sz.h / 2 };
+    await moveAlongPath(carrier, [lane, sorterIn], 700);
+    const chuteNo = WarehouseMap.flashSorterChute();
+    Log.push(`🧠 ${orderId} 다품목(라인수 ${lineCount}) → Libiao 3D Sorter 슈트 #${chuteNo} 자동분류`, 'decision');
+    await wait(280);
+    await moveAlongPath(carrier, [sorterIn, sorterOut, LAYOUT.packStation], 900);
+  } else {
+    await moveAlongPath(carrier, [lane, LAYOUT.packStation], 900);
+  }
+  carrier.remove();
 
   Log.push(`📦 ${orderId} 패킹 완료${needsGlasses ? ' · 스마트글라스 오토검수 통과' : ''}`, 'info');
 
-  let dock = null;
-  for (let i = 0; i < 8 && !dock; i++) {
-    dock = WarehouseMap.pickDock('outbound');
-    if (!dock) await wait(600);
-  }
-  if (!dock) { Log.push(`⚠️ ${orderId} 출고도크 대기 (전 도크 사용중)`, 'warn'); return; }
-
-  Log.push(`🧭 ${orderId} → 출고도크 ${dock.id} 자동배정`, 'decision');
   const pkg = makePackage();
   WarehouseMap.layers.pallets.appendChild(pkg);
   pkg.setAttribute('transform', `translate(${LAYOUT.packStation.x},${LAYOUT.packStation.y})`);
-  await moveAlongPath(pkg, [LAYOUT.packStation, { x: dock.x - 6, y: dock.y }], 900);
-  pkg.remove();
-
-  const truck = makeTruck('outbound');
-  WarehouseMap.layers.trucks.appendChild(truck);
-  registerEntity(truck, { title: orderId, lines: [`출고도크: ${dock.id}`, `${sku.name} x${qty}`, `피킹수단: ${methodLabel}`] });
-  await moveAlongPath(truck, [{ x: dock.x + 340, y: dock.y }, { x: dock.x + 12, y: dock.y }], 1100);
-  await wait(300);
-  Log.push(`🚚 ${orderId} 출고 완료 · ${dock.id} 도크 출발`, 'success');
-  Stats.outbound++;
-  UI.bumpStat('outbound');
-  await moveAlongPath(truck, [{ x: dock.x + 12, y: dock.y }, { x: dock.x + 340, y: dock.y }], 1000);
-  truck.remove();
-  WarehouseMap.releaseDock(dock.id);
+  await dispatchOutbound(orderId, [`${sku.name} x${qty}`, `피킹수단: ${methodLabel}`], pkg, LAYOUT.packStation);
 }
 
 // ---------- loops ----------

@@ -22,9 +22,10 @@ const WarehouseMap = (() => {
     drawShuttleZone();
     drawClimberZone();
     drawHub(LAYOUT.orderHub, '오더 분석 AI', 'hub-order');
-    drawPickLane(LAYOUT.pickLanes.haipick, 'HAIPICK 피킹\n(스마트글라스 불필요)');
-    drawPickLane(LAYOUT.pickLanes.cart, '피킹카트\n(스마트글라스)');
-    drawPickLane(LAYOUT.pickLanes.amr, 'AMR 피킹\n(스마트글라스)');
+    drawPickLane(LAYOUT.pickLanes.haipick, 'HAIPICK 피킹\n(스마트글라스 불필요)', 'climber');
+    drawPickLane(LAYOUT.pickLanes.cart, '피킹카트\n(스마트글라스)', 'cart');
+    drawPickLane(LAYOUT.pickLanes.amr, 'AMR 피킹\n(스마트글라스)', 'amr');
+    drawSorterZone();
     drawPackStation();
     drawDockGroup(LAYOUT.outboundDocks, '출고 도크', 'outbound');
 
@@ -99,9 +100,15 @@ const WarehouseMap = (() => {
     guide([oh, LAYOUT.pickLanes.haipick]);
     guide([oh, LAYOUT.pickLanes.cart]);
     guide([oh, LAYOUT.pickLanes.amr]);
+
+    const sz = LAYOUT.sorterZone;
+    const sorterIn = { x: sz.x, y: sz.y + sz.h / 2 };
+    const sorterOut = { x: sz.x + sz.w, y: sz.y + sz.h / 2 };
+    guide([LAYOUT.pickLanes.haipick, { x: sz.x + sz.w * 0.3, y: sz.y }]);
+    guide([LAYOUT.pickLanes.cart, sorterIn]);
+    guide([LAYOUT.pickLanes.amr, sorterIn]);
+    guide([sorterOut, LAYOUT.packStation]);
     guide([LAYOUT.pickLanes.haipick, LAYOUT.packStation]);
-    guide([LAYOUT.pickLanes.cart, LAYOUT.packStation]);
-    guide([LAYOUT.pickLanes.amr, LAYOUT.packStation]);
     LAYOUT.outboundDocks.forEach(d => guide([LAYOUT.packStation, { x: d.x - 40, y: d.y }]));
   }
 
@@ -131,7 +138,7 @@ const WarehouseMap = (() => {
 
   function drawRobotArm() {
     const p = LAYOUT.robotArm;
-    const g = svgEl('g', { class: 'robot-arm', transform: `translate(${p.x} ${p.y})` });
+    const g = svgEl('g', { class: 'robot-arm equip-hoverable', 'data-equip-id': 'robot-arm', transform: `translate(${p.x} ${p.y})` });
     g.appendChild(svgEl('circle', { r: 20, class: 'arm-base' }));
     const arm = svgEl('g', { class: 'arm-limb' });
     arm.appendChild(svgEl('rect', { x: -3, y: -34, width: 6, height: 34, rx: 3 }));
@@ -152,7 +159,7 @@ const WarehouseMap = (() => {
 
   function drawShuttleZone() {
     const z = LAYOUT.shuttleZone;
-    const g = svgEl('g', { class: 'zone shuttle-zone' });
+    const g = svgEl('g', { class: 'zone shuttle-zone equip-hoverable', 'data-equip-id': 'shuttle' });
     g.appendChild(svgEl('rect', { x: z.x, y: z.y, width: z.w, height: z.h, class: 'zone-bg' }));
     g.appendChild(svgEl('text', { x: z.x + z.w / 2, y: z.y - 10, class: 'zone-title', 'text-anchor': 'middle' })).textContent = z.label;
     const gx = z.x + (z.w - z.cols * z.cellW) / 2;
@@ -176,7 +183,7 @@ const WarehouseMap = (() => {
 
   function drawClimberZone() {
     const z = LAYOUT.climberZone;
-    const g = svgEl('g', { class: 'zone climber-zone' });
+    const g = svgEl('g', { class: 'zone climber-zone equip-hoverable', 'data-equip-id': 'climber' });
     g.appendChild(svgEl('rect', { x: z.x, y: z.y, width: z.w, height: z.h, class: 'zone-bg' }));
     g.appendChild(svgEl('text', { x: z.x + z.w / 2, y: z.y - 10, class: 'zone-title', 'text-anchor': 'middle' })).textContent = z.label;
     const gx = z.x + (z.w - z.cols * z.cellW) / 2;
@@ -199,8 +206,8 @@ const WarehouseMap = (() => {
     layers.climberBot = climber;
   }
 
-  function drawPickLane(p, label) {
-    const g = svgEl('g', { class: 'zone pick-lane' });
+  function drawPickLane(p, label, equipId) {
+    const g = svgEl('g', { class: 'zone pick-lane equip-hoverable', 'data-equip-id': equipId });
     g.appendChild(svgEl('rect', { x: p.x - 70, y: p.y - 30, width: 140, height: 60, rx: 10, class: 'zone-bg small' }));
     const lines = label.split('\n');
     lines.forEach((line, i) => {
@@ -211,9 +218,32 @@ const WarehouseMap = (() => {
     svg.appendChild(g);
   }
 
+  function drawSorterZone() {
+    const z = LAYOUT.sorterZone;
+    const g = svgEl('g', { class: 'zone sorter-zone equip-hoverable', 'data-equip-id': 'sorter' });
+    g.appendChild(svgEl('rect', { x: z.x, y: z.y, width: z.w, height: z.h, class: 'zone-bg' }));
+    g.appendChild(svgEl('text', { x: z.x + z.w / 2, y: z.y - 10, class: 'zone-title small', 'text-anchor': 'middle' })).textContent = z.label;
+    const gx = z.x + (z.w - z.cols * z.cellW) / 2;
+    const gy = z.y + 20;
+    const chutes = [];
+    for (let r = 0; r < z.rows; r++) {
+      for (let c = 0; c < z.cols; c++) {
+        const x = gx + c * z.cellW;
+        const y = gy + r * z.cellH;
+        const rect = svgEl('rect', {
+          x: x + 2, y: y + 2, width: z.cellW - 4, height: z.cellH - 4, rx: 2, class: 'chute-cell',
+        });
+        g.appendChild(rect);
+        chutes.push(rect);
+      }
+    }
+    svg.appendChild(g);
+    layers.sorterChutes = chutes;
+  }
+
   function drawPackStation() {
     const p = LAYOUT.packStation;
-    const g = svgEl('g', { class: 'zone pack-station' });
+    const g = svgEl('g', { class: 'zone pack-station equip-hoverable', 'data-equip-id': 'pack-station' });
     g.appendChild(svgEl('rect', { x: p.x - 70, y: p.y - 34, width: 140, height: 68, rx: 10, class: 'zone-bg small' }));
     g.appendChild(svgEl('text', { x: p.x, y: p.y - 6, class: 'zone-title small', 'text-anchor': 'middle' })).textContent = '패킹 / 오토검수';
     g.appendChild(svgEl('text', { x: p.x, y: p.y + 12, class: 'zone-title small dim', 'text-anchor': 'middle' })).textContent = '출고도크 자동배정';
@@ -262,6 +292,17 @@ const WarehouseMap = (() => {
     s.lightEl.setAttribute('class', 'dock-light idle');
   }
 
+  // Flash a random sorter chute briefly to visualize an order->chute assignment.
+  function flashSorterChute() {
+    const chutes = layers.sorterChutes;
+    if (!chutes || !chutes.length) return null;
+    const idx = randomInt(0, chutes.length - 1);
+    const el = chutes[idx];
+    el.classList.add('active');
+    setTimeout(() => el.classList.remove('active'), 900);
+    return idx + 1;
+  }
+
   return {
     init,
     get layers() { return layers; },
@@ -270,5 +311,6 @@ const WarehouseMap = (() => {
     shuttleFillRatio: () => fillRatio(shuttleCells),
     climberFillRatio: () => fillRatio(climberCells),
     pickDock, releaseDock,
+    flashSorterChute,
   };
 })();
