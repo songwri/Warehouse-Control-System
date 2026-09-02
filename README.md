@@ -19,6 +19,19 @@ npm run build      # dist/ 에 정적 파일 생성
 npm run preview    # 빌드 결과 로컬 확인
 ```
 
+## 자동 배포 (GitHub Pages)
+
+`.github/workflows/deploy.yml`이 `main`과 `claude/wcs-mockup-simulator-plan-24rdmo`
+브랜치에 push될 때마다 자동으로 빌드해 GitHub Pages에 배포합니다. 로컬에 아무것도 설치할
+필요 없이 push만 하면 됩니다.
+
+**최초 1회만** 저장소 설정에서 Pages 소스를 켜야 합니다 (iPad Safari에서도 가능):
+저장소 → **Settings** → 좌측 메뉴 **Pages** → **Build and deployment** → Source를
+**GitHub Actions**로 선택. 이후에는 push할 때마다 1~2분 내로 자동 반영됩니다.
+
+배포 후 주소: **https://songwri.github.io/Warehouse-Control-System/**
+(Actions 탭에서 진행 상황과 실패 로그 확인 가능)
+
 `dist/` 폴더를 그대로 아무 정적 호스팅(예: Netlify, S3, 사내 웹서버)에 올리면 바로 배포됩니다.
 
 ## 데모 시나리오
