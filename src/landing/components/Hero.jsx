@@ -5,6 +5,16 @@ import DeviceMockup from './DeviceMockup.jsx';
 
 const easeMech = [0.175, 0.885, 0.32, 1.275];
 
+// The product name IS the acronym, so the headline sets it that way: one word
+// per line, left-aligned, with each initial in the accent. The three red
+// letters then stack into a vertical W-C-S down the left edge, and the name
+// explains itself without a line of body copy underneath doing it in prose.
+const NAME = [
+  ['W', 'arehouse'],
+  ['C', 'ontrol'],
+  ['S', 'ystem'],
+];
+
 export default function Hero() {
   return (
     <section id="top" className="relative overflow-hidden px-6 pb-20 pt-16 md:pb-28 md:pt-24">
@@ -19,7 +29,7 @@ export default function Hero() {
           >
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" style={{ boxShadow: 'var(--shadow-glow-ok)' }} />
             <span className="font-mono-ind text-[11px] uppercase tracking-widest text-[var(--text-muted)]">
-              Build 04.02 · Live Simulation Engine
+              Live Simulation Engine
             </span>
           </motion.div>
 
@@ -27,30 +37,21 @@ export default function Hero() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.08, ease: easeMech }}
-            className="mt-6 text-[2.6rem] font-extrabold leading-[1.05] tracking-tight text-[var(--text)] md:text-6xl"
-            style={{ textWrap: 'balance' }}
+            className="mt-7 text-[2.9rem] font-extrabold leading-[0.98] tracking-[-0.03em] text-[var(--text)] md:text-[4.5rem]"
           >
-            Warehouse Control
-            <br />
-            <span className="text-[var(--accent)]">System</span>
+            {NAME.map(([initial, rest]) => (
+              <span key={initial} className="block">
+                <span className="text-[var(--accent)]">{initial}</span>
+                {rest}
+              </span>
+            ))}
           </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.16, ease: easeMech }}
-            className="mt-6 max-w-lg text-base leading-relaxed text-[var(--text-muted)] md:text-lg"
-          >
-            Simulate inbound, storage, picking, and outbound flows on a physical,
-            tactile console before a single conveyor turns. Every dock, sorter, and
-            AMR modeled down to the routing rule.
-          </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.24, ease: easeMech }}
-            className="mt-9 flex flex-wrap items-center gap-4"
+            transition={{ duration: 0.6, delay: 0.2, ease: easeMech }}
+            className="mt-10 flex flex-wrap items-center gap-4"
           >
             <PhysicalButton variant="primary" size="lg" onClick={() => (window.location.href = 'simulator.html')}>
               <Play className="h-4 w-4" strokeWidth={2.5} />
@@ -61,14 +62,16 @@ export default function Hero() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.35 }}
-            className="mt-10 flex items-center gap-6 font-mono-ind text-[11px] uppercase tracking-widest text-[var(--text-muted)]/70"
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono-ind text-[11px] uppercase tracking-widest text-[var(--text-muted)]/70"
           >
-            <span>No install</span>
+            {/* nowrap per item: narrow screens should break BETWEEN the
+                three facts, never inside "in-browser" */}
+            <span className="whitespace-nowrap">No install</span>
             <span className="h-3 w-px bg-[var(--border-dark)]" />
-            <span>Runs in-browser</span>
+            <span className="whitespace-nowrap">Runs in-browser</span>
             <span className="h-3 w-px bg-[var(--border-dark)]" />
-            <span>1,000-order demo</span>
+            <span className="whitespace-nowrap">1,000-order demo</span>
           </motion.div>
         </div>
 
