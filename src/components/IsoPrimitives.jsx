@@ -1,4 +1,5 @@
 import { isoPoint, depthOf, TILE_W, TILE_H } from '../lib/iso.js';
+import EquipIcon from './EquipIcon.jsx';
 
 export function IsoTile({ col, row, color, opacity = 1, filled = false }) {
   const { x, y } = isoPoint(col, row);
@@ -67,6 +68,61 @@ export function IsoToken({ col, row, elevation = 20, size = 11, color, glow = fa
         zIndex: depthOf(col, row) + z,
       }}
     />
+  );
+}
+
+// A moving actor rendered as its own icon chip (truck, forklift, robot
+// arm) rather than a plain colored token - used for the inbound vehicle
+// so its WCS-decided method (로봇암/무인지게차/일반하차) reads at a glance.
+export function IsoActor({ col, row, elevation = 14, icon, color = '#e2e8f0', size = 28, pulse = false }) {
+  const { x, y } = isoPoint(col, row, elevation);
+  return (
+    <div
+      className="absolute flex items-center justify-center rounded-md transition-shadow"
+      style={{
+        left: x - size / 2,
+        top: y + TILE_H / 2 - size / 2,
+        width: size,
+        height: size,
+        background: 'rgba(12,17,27,.9)',
+        border: `1px solid ${color}77`,
+        boxShadow: pulse ? `0 0 16px 3px ${color}aa` : '0 6px 12px -6px rgba(0,0,0,.65)',
+        zIndex: depthOf(col, row) + 2500,
+      }}
+    >
+      <EquipIcon name={icon} className="w-4 h-4" style={{ color }} />
+    </div>
+  );
+}
+
+// A small growing/draining stack of layered bars representing units
+// piled at a spot (inbound staging, storage bands) - reads as boxes or
+// pallets accumulating rather than a bare number.
+export function PileStack({ col, row, count, color, cap = 5, elevation = 8 }) {
+  if (!count) return null;
+  const layers = Math.min(cap, Math.max(1, Math.round(count / 4)));
+  const { x, y } = isoPoint(col, row, elevation);
+  return (
+    <div
+      className="absolute flex flex-col-reverse items-center pointer-events-none transition-all duration-300"
+      style={{ left: x - 11, top: y + TILE_H / 2 - 6 - layers * 4, zIndex: depthOf(col, row) + 1800 }}
+    >
+      {Array.from({ length: layers }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            width: 20,
+            height: 6,
+            marginTop: -2,
+            background: color,
+            opacity: 0.5 + i * 0.09,
+            borderRadius: 2,
+            border: '1px solid rgba(255,255,255,.25)',
+          }}
+        />
+      ))}
+      <span className="text-[8px] font-mono font-semibold text-slate-200 mt-1 drop-shadow">{count}</span>
+    </div>
   );
 }
 

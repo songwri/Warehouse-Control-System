@@ -56,7 +56,7 @@ export default function Hero() {
               <Play className="h-4 w-4" strokeWidth={2.5} />
               Watch Demo
             </PhysicalButton>
-            <PhysicalButton variant="secondary" size="lg">
+            <PhysicalButton variant="secondary" size="lg" onClick={() => (window.location.href = 'simulator.html')}>
               Start
               <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
             </PhysicalButton>

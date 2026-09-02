@@ -1,6 +1,12 @@
 // Warehouse floor plan: where each zone/equipment sits on the isometric
 // grid (col = process progression, row = lane position), plus the demo's
-// volume constants.
+// volume constants and the WCS decision helpers that pick a route.
+//
+// Process order (left -> right): INBOUND -> STORAGE -> PICKING -> SORT
+// (optional, bulk-pick only) -> PACKING -> OUTBOUND. Picking sits before
+// sort because a bulk-picked (총량피킹) run must be sorted into individual
+// orders afterward, while a discrete order-pick (오더피킹) is already
+// order-level and skips sort entirely.
 
 export const TOTAL_ORDERS = 1000;
 export const BATCH_SIZE = 100;
@@ -12,50 +18,71 @@ export const LANE_COLOR = {
   manual: '#c084fc',
 };
 
-// ---- Inbound ----
+// Off-map spawn point trucks drive in from / leave toward.
+export const OFFMAP_COL = -2.4;
+
+// The WCS AI core sits centrally above the whole flow so its decision
+// pings can reach any zone without colliding with equipment labels.
+export const CORE_COL = 15;
+export const CORE_ROW = -2.8;
+
+// ---- Inbound (vehicle dock = WCS's 1st decision: which vehicle method) ----
 export const INBOUND_COL = 1;
 export const INBOUND_DOCKS = [
-  { id: 'IN-1', row: 1, method: 'XYZ 로봇암', auto: true },
-  { id: 'IN-2', row: 5, method: '무인지게차', auto: true },
-  { id: 'IN-3', row: 9, method: '일반 하차', auto: false },
+  { id: 'IN-1', row: 1, method: '로봇암', vehicle: 'robotArm', auto: true },
+  { id: 'IN-2', row: 5, method: '무인지게차', vehicle: 'agv', auto: true },
+  { id: 'IN-3', row: 9, method: '일반 하차', vehicle: 'manual', auto: false },
 ];
 
 // ---- Storage (col band) subdivided into three row-bands ----
-export const STORAGE_COL_RANGE = [3, 9];
+export const STORAGE_COL_RANGE = [4, 10];
 export const STORAGE_BANDS = {
   climber: { rowRange: [0, 3], label: 'HaiPick 하이클라이머', sub: 'PCS/토트', lane: 'pcs' },
   shuttle: { rowRange: [4, 7], label: '4-Way 셔틀', sub: '팔레트', lane: 'plt' },
-  rack: { rowRange: [8, 11], label: '일반 팔레트랙', sub: '매뉴얼', lane: 'manual' },
+  rack: { rowRange: [8, 11], label: '일반 팔레트랙', sub: '박스/매뉴얼', lane: 'manual' },
 };
 export const STORAGE_CAP_VISUAL = 260; // tiles' fill reads 100% at this count
 
-// ---- Sort (Libiao 3D Sorter classification hub) ----
-export const SORT_COL = 12;
-export const SORT_ROW = 5.5;
-
-// ---- Picking (two lanes, fed by the sort hub) ----
-export const PICKING_COL_RANGE = [14, 16];
+// ---- Picking (moved ahead of sort; 4 lanes) ----
+export const PICKING_COL_RANGE = [12, 14];
 export const PICKING_LANES = {
-  climber: { rowRange: [0, 5], label: '하이클라이머 피킹(연계)', lane: 'pcs' },
-  amr: { rowRange: [6, 11], label: 'AMR & DPC (스마트글라스)', lane: 'plt-manual' },
+  climber: { rowRange: [0, 2], label: '하이클라이머 피킹', sub: 'PCS 재고 사용', icon: 'climber' },
+  amr: { rowRange: [3, 5], label: 'AMR', sub: '일반 팔레트랙 · 스마트글라스', icon: 'amr' },
+  dpc: { rowRange: [6, 8], label: 'DPC 피킹카트', sub: '일반 팔레트랙 · 스마트글라스', icon: 'dpc' },
+  dps: { rowRange: [9, 11], label: 'DPS', sub: 'Digital Picking System', icon: 'dps' },
 };
 
-// ---- Outbound ----
-export const OUTBOUND_COL = 18;
+// ---- Sort (optional — only bulk-picked/총량피킹 groups pass through) ----
+export const SORT_COL = 18;
+export const SORT_HUBS = {
+  libiao: { row: 3, label: 'Libiao 3D 소터', icon: 'sorter' },
+  das: { row: 8, label: 'DAS', sub: 'Digital Assort System', icon: 'das' },
+};
+
+// ---- Packing (auto vs manual, 50/50 by order group) ----
+export const PACKING_COL = 23;
+export const PACKING_STATIONS = {
+  auto: { row: 4, label: '자동 포장', icon: 'pack-auto' },
+  manual: { row: 8, label: '매뉴얼 포장', icon: 'pack-manual' },
+};
+
+// ---- Outbound (pooled 1/3 each, shuttle-direct pallets included) ----
+export const OUTBOUND_COL = 28;
 export const OUTBOUND_DOCKS = [
-  { id: 'OUT-1', row: 1, method: '로봇암' },
-  { id: 'OUT-2', row: 5, method: '무인지게차' },
-  { id: 'OUT-3', row: 9, method: '일반 지게차' },
+  { id: 'OUT-1', row: 1, method: '로봇암', vehicle: 'robotArm' },
+  { id: 'OUT-2', row: 5, method: '무인지게차', vehicle: 'agv' },
+  { id: 'OUT-3', row: 9, method: '일반 지게차', vehicle: 'manual' },
 ];
 
 // Visual zone bands (floor tint), one wider than the equipment's own
 // col constants so each zone reads as a real region, not a sliver.
 export const ZONES = [
   { key: 'inbound', label: '입고 · INBOUND', colRange: [0, 2], color: '#22d3ee' },
-  { key: 'storage', label: '보관 · STORAGE', colRange: [3, 9], color: '#60a5fa' },
-  { key: 'sort', label: '분류 · SORT', colRange: [10, 13], color: '#c084fc' },
-  { key: 'picking', label: '피킹 · PICKING', colRange: [14, 16], color: '#34d399' },
-  { key: 'outbound', label: '출고 · OUTBOUND', colRange: [17, 19], color: '#f59e0b' },
+  { key: 'storage', label: '보관 · STORAGE', colRange: [3, 10], color: '#60a5fa' },
+  { key: 'picking', label: '피킹 · PICKING', colRange: [11, 15], color: '#34d399' },
+  { key: 'sort', label: '분류 · SORT (선택)', colRange: [16, 19], color: '#c084fc' },
+  { key: 'packing', label: '포장 · PACKING', colRange: [20, 24], color: '#fb923c' },
+  { key: 'outbound', label: '출고 · OUTBOUND', colRange: [25, 29], color: '#f59e0b' },
 ];
 
 export function zoneOfCol(col) {
@@ -66,11 +93,33 @@ function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-export function assignInboundLane() {
-  const r = Math.random();
-  if (r < 0.35) return 'pcs';
-  if (r < 0.7) return 'plt';
-  return 'manual';
+function weightedPick(entries) {
+  // entries: [[key, weight], ...]
+  const total = entries.reduce((s, [, w]) => s + w, 0);
+  let r = Math.random() * total;
+  for (const [key, w] of entries) {
+    r -= w;
+    if (r <= 0) return key;
+  }
+  return entries[entries.length - 1][0];
+}
+
+// ---- WCS decision #1 (inbound): classify the arriving vehicle itself ----
+export function pickInboundDock() {
+  return INBOUND_DOCKS[randInt(0, INBOUND_DOCKS.length - 1)];
+}
+
+// ---- WCS decision (inbound): pallet vs box cargo analysis ----
+export function pickCargoType(dock) {
+  if (dock.vehicle === 'manual') return 'box'; // 일반 하차 = carton by carton
+  return Math.random() < 0.45 ? 'pallet' : 'box';
+}
+
+// pallet cargo always lands on the 4-way shuttle (pallet-unit storage);
+// box cargo splits between the climber (PCS/tote) and general rack.
+export function assignStorageBand(cargoType) {
+  if (cargoType === 'pallet') return 'shuttle';
+  return Math.random() < 0.5 ? 'climber' : 'rack';
 }
 
 export function pickDock(docks) {
@@ -81,4 +130,42 @@ export function rowInBand(band) {
   return band.rowRange[0] + Math.random() * (band.rowRange[1] - band.rowRange[0]);
 }
 
-export { randInt };
+export function rowInLane(lane) {
+  return lane.rowRange[0] + Math.random() * (lane.rowRange[1] - lane.rowRange[0]);
+}
+
+// ---- WCS decision #2 (WMS): group incoming orders into a bulk (총량피킹)
+// or discrete (오더피킹) run. Few order-lines + heavy SKU overlap -> bulk
+// (must sort afterward); many mixed order-lines -> discrete (skips sort).
+export function decideGroupType() {
+  return Math.random() < 0.42 ? 'bulk' : 'discrete';
+}
+
+// Picking-lane weights per group type. The climber always serves its own
+// stored PCS product; AMR/DPC split the general-rack volume ~50/50; DPS
+// only carries discrete (order-pick) traffic.
+export function pickPickingLane(groupType) {
+  if (groupType === 'bulk') {
+    return weightedPick([
+      ['climber', 0.3],
+      ['amr', 0.35],
+      ['dpc', 0.35],
+    ]);
+  }
+  return weightedPick([
+    ['climber', 0.25],
+    ['amr', 0.25],
+    ['dpc', 0.25],
+    ['dps', 0.25],
+  ]);
+}
+
+export function pickSortHub() {
+  return Math.random() < 0.5 ? 'libiao' : 'das';
+}
+
+export function pickPackMethod() {
+  return Math.random() < 0.5 ? 'auto' : 'manual';
+}
+
+export { randInt, weightedPick };

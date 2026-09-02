@@ -1,5 +1,5 @@
 import { AreaChart, Area, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
-import { TOTAL_ORDERS, BATCH_SIZE, TOTAL_BATCHES } from '../hooks/useSimulation.js';
+import { TOTAL_ORDERS } from '../hooks/useSimulation.js';
 import { LANE_COLOR } from '../data/floorplan.js';
 
 function StatTile({ label, value, unit, accent, sub }) {
@@ -16,27 +16,32 @@ function StatTile({ label, value, unit, accent, sub }) {
 }
 
 export default function Dashboard({ sim }) {
-  const { storageCounts, totalAbsorbed, batchesFormed, completedCount, metrics, running } = sim;
+  const { storageCounts, totalAbsorbed, wmsPendingCount, wmsNextThreshold, wmsGroupsFormed, completedCount, palletCompleted, metrics, running } = sim;
   const inStorage = storageCounts.climber + storageCounts.shuttle + storageCounts.rack;
-  const towardNextBatch = totalAbsorbed - batchesFormed * BATCH_SIZE;
 
   return (
     <div className="flex items-stretch border-t border-slate-800 bg-ink-900/90 h-[104px] flex-shrink-0">
-      <StatTile label="Inbound → Storage" value={totalAbsorbed} unit={`/ ${TOTAL_ORDERS}건`} accent="#e2e8f0" sub={`재고 ${inStorage}건 보관중`} />
+      <StatTile label="입고 누적" value={totalAbsorbed} unit="건" accent="#e2e8f0" sub={`재고 ${inStorage}건 보관중`} />
 
       <div className="flex flex-col justify-center px-4 border-r border-slate-800 min-w-[168px]">
-        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">다음 출고그룹까지</span>
+        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">WMS 그룹핑 대기</span>
         <div className="flex items-center gap-2 mt-1">
-          <span className="font-mono text-xl font-semibold text-slate-100">{towardNextBatch}</span>
-          <span className="text-xs text-slate-500">/ {BATCH_SIZE}건</span>
+          <span className="font-mono text-xl font-semibold text-slate-100">{wmsPendingCount}</span>
+          <span className="text-xs text-slate-500">/ {wmsNextThreshold}건</span>
           <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-purple-400 to-amber-400" style={{ width: `${(towardNextBatch / BATCH_SIZE) * 100}%` }} />
+            <div className="h-full bg-gradient-to-r from-purple-400 to-blue-400" style={{ width: `${Math.min(100, (wmsPendingCount / wmsNextThreshold) * 100)}%` }} />
           </div>
         </div>
-        <span className="text-[10px] text-slate-500 font-mono">출고그룹 {batchesFormed} / {TOTAL_BATCHES} 편성</span>
+        <span className="text-[10px] text-slate-500 font-mono">오더그룹 {wmsGroupsFormed}회 편성</span>
       </div>
 
-      <StatTile label="출고 완료" value={completedCount} unit={`/ ${TOTAL_ORDERS}건`} accent="#34d399" sub={`배치 ${Math.floor(completedCount / BATCH_SIZE)}건 발송`} />
+      <StatTile
+        label="출고 완료"
+        value={completedCount}
+        unit={`/ ${TOTAL_ORDERS}건`}
+        accent="#34d399"
+        sub={`+ 팔레트 직송 ${palletCompleted}건`}
+      />
 
       <div className="flex flex-col justify-center px-4 border-r border-slate-800 min-w-[150px]">
         <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">AI Optimization</span>

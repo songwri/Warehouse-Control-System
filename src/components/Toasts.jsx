@@ -9,7 +9,7 @@ const TONE_STYLE = {
 
 export default function Toasts({ events }) {
   return (
-    <div className="absolute right-4 top-3 z-50 flex flex-col gap-2 w-[300px] pointer-events-none">
+    <div className="absolute right-4 top-[104px] z-50 flex flex-col gap-2 w-[300px] pointer-events-none">
       <AnimatePresence>
         {events.map((e) => (
           <motion.div

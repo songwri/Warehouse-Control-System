@@ -4,22 +4,38 @@ import { GRID_COLS, GRID_ROWS, DESIGN_W, DESIGN_H, isoPoint } from '../lib/iso.j
 import {
   ZONES,
   zoneOfCol,
+  CORE_COL,
+  CORE_ROW,
+  INBOUND_COL,
   INBOUND_DOCKS,
   STORAGE_BANDS,
   STORAGE_COL_RANGE,
   STORAGE_CAP_VISUAL,
-  SORT_COL,
-  SORT_ROW,
   PICKING_COL_RANGE,
   PICKING_LANES,
+  SORT_COL,
+  SORT_HUBS,
+  PACKING_COL,
+  PACKING_STATIONS,
   OUTBOUND_COL,
   OUTBOUND_DOCKS,
   LANE_COLOR,
 } from '../data/floorplan.js';
-import { INBOUND_DURATIONS, BATCH_DURATIONS, URGENT_DURATIONS, currentPos } from '../data/timings.js';
+import {
+  VEHICLE_DURATIONS,
+  CARGO_DURATIONS,
+  GROUP_DURATIONS,
+  PALLET_SHIP_DURATIONS,
+  URGENT_DURATIONS,
+  currentPos,
+} from '../data/timings.js';
 import useFitScale from '../hooks/useFitScale.js';
-import { IsoTile, IsoBuilding, IsoToken, IsoLabel } from './IsoPrimitives.jsx';
+import { IsoTile, IsoBuilding, IsoToken, IsoActor, PileStack, IsoLabel } from './IsoPrimitives.jsx';
 import EquipIcon from './EquipIcon.jsx';
+
+const GROUP_TYPE_COLOR = { bulk: '#60a5fa', discrete: '#c084fc' };
+const PALLET_SHIP_COLOR = '#fb923c';
+const VEHICLE_ICON = { robotArm: 'robot-arm', agv: 'forklift', manual: 'forklift' };
 
 function shadeFor(col, row) {
   const zone = zoneOfCol(col);
@@ -38,10 +54,13 @@ function bandOccupancy(row, storageCounts) {
 }
 
 export default function IsoWarehouse({
-  inboundItems,
-  batches,
-  urgentTokens,
+  vehicles,
+  cargoUnits,
+  inboundPile,
   storageCounts,
+  groups,
+  palletShipments,
+  urgentTokens,
   pulse,
   bottleneck,
   failure,
@@ -66,7 +85,7 @@ export default function IsoWarehouse({
     for (let c = 0; c < GRID_COLS; c++) {
       for (let r = 0; r < GRID_ROWS; r++) {
         const { zone, opacity } = shadeFor(c, r);
-        let color = zone.color;
+        const color = zone.color;
         const occ = zone.key === 'storage' ? bandOccupancy(r, storageCounts) : null;
         list.push(
           <IsoTile
@@ -82,7 +101,7 @@ export default function IsoWarehouse({
     return list;
   }, [storageCounts]);
 
-  const wcsCore = isoPoint(SORT_COL, SORT_ROW, 150);
+  const wcsCore = isoPoint(CORE_COL, CORE_ROW, 170);
 
   return (
     <div ref={wrapRef} className="relative flex-1 min-h-0 rounded-xl border border-slate-700/60 bg-ink-900/70 overflow-hidden">
@@ -106,12 +125,25 @@ export default function IsoWarehouse({
           </IsoLabel>
         ))}
 
-        {/* inbound dock buildings */}
+        {/* inbound vehicle docks — WCS decision #1: which vehicle method */}
         {INBOUND_DOCKS.map((d) => (
           <IsoBuilding key={d.id} col={1} row={d.row} width={86} elevation={44} borderColor="rgba(34,211,238,.4)">
-            <EquipIcon name={d.auto ? 'auto-in' : 'manual-in'} className="w-4 h-4 text-cyan-300" />
+            <EquipIcon name={VEHICLE_ICON[d.vehicle]} className="w-4 h-4 text-cyan-300" />
             <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{d.method}</span>
           </IsoBuilding>
+        ))}
+
+        {/* inbound staging pile — boxes/pallets accumulate before moving to storage */}
+        {Object.entries(inboundPile || {}).map(([bandKey, count]) => (
+          <PileStack
+            key={`ipile-${bandKey}`}
+            col={2}
+            row={(STORAGE_BANDS[bandKey].rowRange[0] + STORAGE_BANDS[bandKey].rowRange[1]) / 2}
+            count={count}
+            color={LANE_COLOR[STORAGE_BANDS[bandKey].lane]}
+            cap={bandKey === 'shuttle' ? 4 : 6}
+            elevation={10}
+          />
         ))}
 
         {/* storage band markers */}
@@ -129,15 +161,19 @@ export default function IsoWarehouse({
             <span className="text-[8.5px] font-mono text-slate-400">{storageCounts[key] || 0}건 보관중</span>
           </IsoBuilding>
         ))}
+        {Object.entries(STORAGE_BANDS).map(([key, band]) => (
+          <PileStack
+            key={`spile-${key}`}
+            col={STORAGE_COL_RANGE[0] + 3.4}
+            row={(band.rowRange[0] + band.rowRange[1]) / 2}
+            count={storageCounts[key] || 0}
+            color={LANE_COLOR[band.lane]}
+            cap={7}
+            elevation={8}
+          />
+        ))}
 
-        {/* sort hub */}
-        <IsoBuilding col={SORT_COL} row={SORT_ROW} width={104} elevation={54} borderColor={bottleneck ? '#ef4444' : 'rgba(192,132,252,.5)'} glow="#ef4444" active={!!bottleneck}>
-          <EquipIcon name="sorter" className="w-5 h-5 text-purple-300" />
-          <span className="text-[10px] text-slate-100 font-semibold leading-tight">Libiao 3D 소터</span>
-          {bottleneck && <span className="text-[8.5px] font-mono text-red-400 blink-fast">BOTTLENECK</span>}
-        </IsoBuilding>
-
-        {/* picking lane markers */}
+        {/* picking lane markers — moved ahead of sort */}
         {Object.entries(PICKING_LANES).map(([key, lane]) => (
           <IsoBuilding
             key={key}
@@ -147,12 +183,42 @@ export default function IsoWarehouse({
             elevation={42}
             borderColor="rgba(52,211,153,.4)"
           >
-            <EquipIcon name={key === 'climber' ? 'climber' : 'amr'} className="w-4 h-4 text-emerald-300" />
+            <EquipIcon name={lane.icon} className="w-4 h-4 text-emerald-300" />
             <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{lane.label}</span>
+            <span className="text-[8px] text-slate-500 leading-tight">{lane.sub}</span>
           </IsoBuilding>
         ))}
 
-        {/* outbound dock buildings */}
+        {/* sort hubs — optional, only bulk (총량피킹) groups pass through */}
+        {Object.entries(SORT_HUBS).map(([key, hub]) => {
+          const isBottleneck = key === 'libiao' && !!bottleneck;
+          return (
+            <IsoBuilding
+              key={key}
+              col={SORT_COL}
+              row={hub.row}
+              width={104}
+              elevation={54}
+              borderColor={isBottleneck ? '#ef4444' : 'rgba(192,132,252,.5)'}
+              glow="#ef4444"
+              active={isBottleneck}
+            >
+              <EquipIcon name={hub.icon} className="w-5 h-5 text-purple-300" />
+              <span className="text-[10px] text-slate-100 font-semibold leading-tight">{hub.label}</span>
+              {isBottleneck && <span className="text-[8.5px] font-mono text-red-400 blink-fast">BOTTLENECK</span>}
+            </IsoBuilding>
+          );
+        })}
+
+        {/* packing stations — auto/manual, 50/50 by order group */}
+        {Object.entries(PACKING_STATIONS).map(([key, st]) => (
+          <IsoBuilding key={key} col={PACKING_COL} row={st.row} width={92} elevation={44} borderColor="rgba(251,146,60,.4)">
+            <EquipIcon name={st.icon} className="w-4 h-4 text-orange-300" />
+            <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{st.label}</span>
+          </IsoBuilding>
+        ))}
+
+        {/* outbound docks — pooled 1/3 each */}
         {OUTBOUND_DOCKS.map((d) => {
           const isFailed = failure && failure.dockId === d.id;
           return (
@@ -164,7 +230,7 @@ export default function IsoWarehouse({
                 </>
               ) : (
                 <>
-                  <EquipIcon name="auto-out" className="w-4 h-4 text-amber-300" />
+                  <EquipIcon name={VEHICLE_ICON[d.vehicle]} className="w-4 h-4 text-amber-300" />
                   <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{d.method}</span>
                 </>
               )}
@@ -226,18 +292,41 @@ export default function IsoWarehouse({
           )}
         </AnimatePresence>
 
-        {/* inbound items in transit */}
-        {inboundItems.map((o) => {
-          const { col, row } = currentPos(o, INBOUND_DURATIONS);
-          const isHold = o.phase === 'decide1' || o.phase === 'decide2';
-          return <IsoToken key={o.id} col={col} row={row} color={LANE_COLOR[o.lane]} glow={isHold} elevation={16} />;
+        {/* inbound vehicles (trucks classified by WCS into robot-arm / AGV / manual) */}
+        {vehicles.map((v) => {
+          const { col, row } = currentPos(v, VEHICLE_DURATIONS);
+          const deciding = v.phase === 'arrived' || v.phase === 'analyzing';
+          return <IsoActor key={v.id} col={col} row={row} icon="truck" color={deciding ? '#f59e0b' : '#94a3b8'} pulse={deciding} elevation={16} />;
         })}
 
-        {/* batch tokens */}
-        {batches.flatMap((batch) =>
-          batch.tokens.map((tk) => {
-            const { col, row } = currentPos(tk, BATCH_DURATIONS);
-            return <IsoToken key={tk.id} col={col} row={row} color={LANE_COLOR[tk.lane]} glow={tk.rerouted} elevation={18} />;
+        {/* cargo units traveling dock -> storage slot */}
+        {cargoUnits.map((u) => {
+          const { col, row } = currentPos(u, CARGO_DURATIONS);
+          return (
+            <IsoToken
+              key={u.id}
+              col={col}
+              row={row}
+              size={u.kind === 'pallet' ? 15 : 9}
+              color={LANE_COLOR[STORAGE_BANDS[u.bandKey].lane]}
+              elevation={14}
+            />
+          );
+        })}
+
+        {/* order-group tokens — picking -> optional sort -> packing -> outbound */}
+        {groups.flatMap((group) =>
+          group.tokens.map((tk) => {
+            const { col, row } = currentPos(tk, GROUP_DURATIONS);
+            return <IsoToken key={tk.id} col={col} row={row} color={GROUP_TYPE_COLOR[tk.groupType]} glow={tk.rerouted} elevation={18} />;
+          })
+        )}
+
+        {/* shuttle pallet-unit shipments — storage -> packing -> outbound directly */}
+        {palletShipments.flatMap((ship) =>
+          ship.tokens.map((tk) => {
+            const { col, row } = currentPos(tk, PALLET_SHIP_DURATIONS);
+            return <IsoToken key={tk.id} col={col} row={row} size={14} color={PALLET_SHIP_COLOR} glow={tk.rerouted} elevation={18} />;
           })
         )}
 

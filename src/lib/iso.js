@@ -4,7 +4,7 @@
 
 export const TILE_W = 60;
 export const TILE_H = 30;
-export const GRID_COLS = 20;
+export const GRID_COLS = 30;
 export const GRID_ROWS = 12;
 
 // Pixel offset so the whole projected grid sits at non-negative x.

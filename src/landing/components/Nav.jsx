@@ -37,7 +37,7 @@ export default function Nav() {
 
         <div className="hidden items-center gap-3 md:flex">
           <VentSlots count={3} />
-          <PhysicalButton variant="secondary" size="sm">
+          <PhysicalButton variant="secondary" size="sm" onClick={() => (window.location.href = 'simulator.html')}>
             Start
           </PhysicalButton>
           <PhysicalButton variant="primary" size="sm">

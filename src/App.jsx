@@ -3,6 +3,7 @@ import ControlBar from './components/ControlBar.jsx';
 import IsoWarehouse from './components/IsoWarehouse.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Toasts from './components/Toasts.jsx';
+import WmsPanel from './components/WmsPanel.jsx';
 
 export default function App() {
   const sim = useSimulation();
@@ -17,7 +18,7 @@ export default function App() {
           <div>
             <h1 className="font-display text-base font-semibold leading-tight">WCS Simulator</h1>
             <p className="text-[10px] font-mono text-slate-500 leading-tight">
-              Warehouse Control System · 임원 데모 · 입고 {sim.totalSpawned}/{TOTAL_ORDERS} 오더
+              Warehouse Control System · 입고 누적 {sim.totalAbsorbed}건
             </p>
           </div>
         </div>
@@ -41,15 +42,19 @@ export default function App() {
 
       <main className="relative flex-1 min-h-0 flex flex-col px-4 py-3">
         <IsoWarehouse
-          inboundItems={sim.inboundItems}
-          batches={sim.batches}
-          urgentTokens={sim.urgentTokens}
+          vehicles={sim.vehicles}
+          cargoUnits={sim.cargoUnits}
+          inboundPile={sim.inboundPile}
           storageCounts={sim.storageCounts}
+          groups={sim.groups}
+          palletShipments={sim.palletShipments}
+          urgentTokens={sim.urgentTokens}
           pulse={sim.pulse}
           bottleneck={sim.bottleneck}
           failure={sim.failure}
           running={sim.running}
         />
+        <WmsPanel pendingCount={sim.wmsPendingCount} ordersSpawned={sim.wmsOrdersSpawned} groupsFormed={sim.wmsGroupsFormed} />
         <Toasts events={sim.events} />
       </main>
 

@@ -3,55 +3,96 @@ import {
   TOTAL_ORDERS,
   BATCH_SIZE,
   TOTAL_BATCHES,
+  OFFMAP_COL,
   INBOUND_COL,
   INBOUND_DOCKS,
   STORAGE_COL_RANGE,
   STORAGE_BANDS,
-  SORT_COL,
-  SORT_ROW,
   PICKING_COL_RANGE,
   PICKING_LANES,
+  SORT_COL,
+  SORT_HUBS,
+  PACKING_COL,
+  PACKING_STATIONS,
   OUTBOUND_COL,
   OUTBOUND_DOCKS,
-  assignInboundLane,
+  pickInboundDock,
+  pickCargoType,
+  assignStorageBand,
   pickDock,
   rowInBand,
+  rowInLane,
+  decideGroupType,
+  pickPickingLane,
+  pickSortHub,
+  pickPackMethod,
   randInt,
 } from '../data/floorplan.js';
-import { INBOUND_DURATIONS, BATCH_DURATIONS, URGENT_DURATIONS } from '../data/timings.js';
+import { VEHICLE_DURATIONS, CARGO_DURATIONS, GROUP_DURATIONS, PALLET_SHIP_DURATIONS, URGENT_DURATIONS } from '../data/timings.js';
 
 const TICK_MS = 100;
-const SPAWN_INTERVAL_MS = 420; // sim-time between inbound spawn events at 1x
-const REP_TOKENS_PER_BATCH = 24; // representative tokens standing in for 100 real orders
+const VEHICLE_SPAWN_INTERVAL_MS = 1300; // sim-time between inbound truck spawn attempts at 1x
+const WMS_ORDER_INTERVAL_MS = 260; // sim-time between orders landing in the WMS queue at 1x
+const GROUP_TOKENS_PER_GROUP = 16; // representative tokens standing in for a real order-group
+const PALLET_SHIP_THRESHOLD = 32; // shuttle units accumulated before a pallet shipment forms
+const PALLET_SHIP_TOKENS = 6;
 const BOTTLENECK_DURATION_MS = 6500;
 const FAILURE_DURATION_MS = 7500;
 
-const BAND_KEYS = { pcs: 'climber', plt: 'shuttle', manual: 'rack' };
-const laneToBand = (lane) => BAND_KEYS[lane];
+// Picking lanes climber/amr/dpc/dps all draw from a storage band; climber
+// serves its own PCS stock, the other three pull general-rack stock.
+const LANE_SOURCE_BAND = { climber: 'climber', amr: 'rack', dpc: 'rack', dps: 'rack' };
 
 let idSeq = 1;
 const nextId = () => idSeq++;
 
+function wmsThreshold() {
+  return randInt(28, 45);
+}
+
 function freshWorld() {
   return {
-    inboundItems: [],
-    batches: [],
-    urgentTokens: [],
+    vehicles: [],
+    cargoUnits: [],
+    inboundPile: { climber: 0, shuttle: 0, rack: 0 },
     storageCounts: { climber: 0, shuttle: 0, rack: 0 },
+    groups: [],
+    palletShipments: [],
+    urgentTokens: [],
+    wmsPendingCount: 0,
+    wmsOrdersSpawned: 0,
+    wmsGroupsFormed: 0,
+    wmsNextThreshold: wmsThreshold(),
     totalAbsorbed: 0,
-    totalSpawned: 0,
-    batchesFormed: 0,
     completedCount: 0,
     urgentCompleted: 0,
+    palletCompleted: 0,
     optimizationEvents: 0,
     leadTimeReduction: 0,
     history: [{ t: 0, absorbed: 0, completed: 0 }],
     simClock: 0,
-    spawnTimer: 0,
+    vehicleSpawnTimer: VEHICLE_SPAWN_INTERVAL_MS, // spawn one immediately
+    wmsTimer: 0,
     metricSample: 0,
     bottleneck: null,
     failure: null,
   };
+}
+
+function pickingLanePos(lane) {
+  return { col: PICKING_COL_RANGE[0] + 1.4, row: rowInLane(PICKING_LANES[lane]) };
+}
+function sortHubPos(hub) {
+  return { col: SORT_COL, row: SORT_HUBS[hub].row };
+}
+function packingPos(method) {
+  return { col: PACKING_COL, row: PACKING_STATIONS[method].row };
+}
+function outboundPos(dock) {
+  return { col: OUTBOUND_COL, row: dock.row };
+}
+function storageSourcePos(bandKey) {
+  return { col: STORAGE_COL_RANGE[1] + 1, row: rowInBand(STORAGE_BANDS[bandKey]) };
 }
 
 // All mutation below operates synchronously on a single mutable `world`
@@ -78,24 +119,30 @@ export default function useSimulation() {
     setTimeout(() => setEvents((ev) => ev.filter((e) => e.id !== id)), 4800);
   }, []);
 
-  const flashPulse = useCallback((col, row) => {
+  const flashPulse = useCallback((col, row, from) => {
     const key = nextId();
-    setPulse({ col, row, key });
+    setPulse({ col, row, key, from });
     setTimeout(() => setPulse((p) => (p && p.key === key ? null : p)), 500);
   }, []);
 
   const commit = useCallback(() => {
     const w = worldRef.current;
     setSnapshot({
-      inboundItems: w.inboundItems,
-      batches: w.batches,
-      urgentTokens: w.urgentTokens,
+      vehicles: w.vehicles,
+      cargoUnits: w.cargoUnits,
+      inboundPile: w.inboundPile,
       storageCounts: w.storageCounts,
+      groups: w.groups,
+      palletShipments: w.palletShipments,
+      urgentTokens: w.urgentTokens,
+      wmsPendingCount: w.wmsPendingCount,
+      wmsOrdersSpawned: w.wmsOrdersSpawned,
+      wmsGroupsFormed: w.wmsGroupsFormed,
+      wmsNextThreshold: w.wmsNextThreshold,
       totalAbsorbed: w.totalAbsorbed,
-      totalSpawned: w.totalSpawned,
-      batchesFormed: w.batchesFormed,
       completedCount: w.completedCount,
       urgentCompleted: w.urgentCompleted,
+      palletCompleted: w.palletCompleted,
       optimizationEvents: w.optimizationEvents,
       leadTimeReduction: w.leadTimeReduction,
       history: w.history,
@@ -111,122 +158,181 @@ export default function useSimulation() {
       const w = worldRef.current;
       const dt = TICK_MS * speedRef.current;
       w.simClock += dt;
-      w.spawnTimer += dt;
+      w.vehicleSpawnTimer += dt;
+      w.wmsTimer += dt;
       w.metricSample += dt;
 
-      // -- spawn inbound items --
-      if (w.totalSpawned < TOTAL_ORDERS && w.spawnTimer >= SPAWN_INTERVAL_MS) {
-        w.spawnTimer = 0;
-        const n = Math.min(TOTAL_ORDERS - w.totalSpawned, Math.random() < 0.3 ? 2 : 1);
-        for (let i = 0; i < n; i++) {
-          const lane = assignInboundLane();
-          const dock = pickDock(INBOUND_DOCKS);
-          const bandKey = laneToBand(lane);
-          const band = STORAGE_BANDS[bandKey];
-          const slot = {
-            col: STORAGE_COL_RANGE[0] + Math.random() * (STORAGE_COL_RANGE[1] - STORAGE_COL_RANGE[0]),
-            row: rowInBand(band),
-          };
-          w.inboundItems.push({
+      // ============ INBOUND: WCS decision #1 - vehicle classification ============
+      if (w.vehicleSpawnTimer >= VEHICLE_SPAWN_INTERVAL_MS) {
+        w.vehicleSpawnTimer = 0;
+        const busyDockIds = new Set(w.vehicles.map((v) => v.dock.id));
+        const freeDocks = INBOUND_DOCKS.filter((d) => !busyDockIds.has(d.id));
+        if (freeDocks.length) {
+          const dock = freeDocks[randInt(0, freeDocks.length - 1)];
+          w.vehicles.push({
             id: nextId(),
-            lane,
-            bandKey,
             dock,
-            phase: 'decide1',
+            cargoType: null,
+            bandKey: null,
+            phase: 'arriving',
             t: 0,
-            from: { col: INBOUND_COL, row: dock.row },
+            from: { col: OFFMAP_COL, row: dock.row },
             to: { col: INBOUND_COL, row: dock.row },
-            slot,
           });
         }
-        w.totalSpawned += n;
       }
 
-      // -- advance inbound items --
-      const nextInbound = [];
-      for (const o of w.inboundItems) {
-        const t = o.t + dt;
-        if (t < INBOUND_DURATIONS[o.phase]) {
-          nextInbound.push({ ...o, t });
+      // -- advance vehicles through their dock lifecycle --
+      const nextVehicles = [];
+      for (const v of w.vehicles) {
+        const t = v.t + dt;
+        if (t < VEHICLE_DURATIONS[v.phase]) {
+          nextVehicles.push({ ...v, t });
           continue;
         }
-        if (o.phase === 'decide1') {
-          const edge = { col: STORAGE_COL_RANGE[0] - 1, row: o.slot.row };
-          nextInbound.push({ ...o, phase: 'toEdge', t: 0, from: { col: INBOUND_COL, row: o.dock.row }, to: edge });
-        } else if (o.phase === 'toEdge') {
-          nextInbound.push({ ...o, phase: 'decide2', t: 0 });
-        } else if (o.phase === 'decide2') {
-          nextInbound.push({ ...o, phase: 'toSlot', t: 0, from: o.to, to: o.slot });
-        } else if (o.phase === 'toSlot') {
-          w.storageCounts = { ...w.storageCounts, [o.bandKey]: (w.storageCounts[o.bandKey] || 0) + 1 };
-          w.totalAbsorbed += 1;
+        if (v.phase === 'arriving') {
+          pushEvent(`🚚 ${v.dock.method} 도크 — 차량 입고`, 'info');
+          const dockPos = { col: INBOUND_COL, row: v.dock.row };
+          nextVehicles.push({ ...v, phase: 'arrived', t: 0, from: dockPos, to: dockPos });
+        } else if (v.phase === 'arrived') {
+          const cargoType = pickCargoType(v.dock);
+          const bandKey = assignStorageBand(cargoType);
+          const bandPos = storageSourcePos(bandKey);
+          pushEvent(
+            `입고형태 분석 — ${cargoType === 'pallet' ? '팔레트' : '박스'} 입고 · ${STORAGE_BANDS[bandKey].label} 배정`,
+            'info'
+          );
+          flashPulse(bandPos.col, bandPos.row);
+          nextVehicles.push({ ...v, phase: 'analyzing', t: 0, cargoType, bandKey });
+        } else if (v.phase === 'analyzing') {
+          nextVehicles.push({ ...v, phase: 'unloading', t: 0 });
+        } else if (v.phase === 'unloading') {
+          // spawn cargo units - a pallet is one large unit, a box vehicle
+          // unloads several small units, staggered so they visibly trickle out.
+          const isPallet = v.cargoType === 'pallet';
+          const unitCount = isPallet ? 1 : randInt(3, 6);
+          for (let i = 0; i < unitCount; i++) {
+            const dockPos = { col: INBOUND_COL, row: v.dock.row };
+            const edge = { col: STORAGE_COL_RANGE[0] - 1, row: rowInBand(STORAGE_BANDS[v.bandKey]) };
+            w.cargoUnits.push({
+              id: nextId(),
+              kind: isPallet ? 'pallet' : 'box',
+              bandKey: v.bandKey,
+              phase: 'toEdge',
+              t: -i * 220,
+              from: dockPos,
+              to: edge,
+            });
+          }
+          w.inboundPile = { ...w.inboundPile, [v.bandKey]: (w.inboundPile[v.bandKey] || 0) + unitCount };
+          nextVehicles.push({ ...v, phase: 'leaving', t: 0, from: { col: INBOUND_COL, row: v.dock.row }, to: { col: OFFMAP_COL, row: v.dock.row } });
         } else {
-          nextInbound.push(o);
+          // 'leaving' finished - drop the vehicle, freeing the dock.
         }
       }
-      w.inboundItems = nextInbound;
+      w.vehicles = nextVehicles;
 
-      // -- form a new outbound batch once enough has accumulated --
-      if (w.batchesFormed < TOTAL_BATCHES && w.totalAbsorbed >= (w.batchesFormed + 1) * BATCH_SIZE) {
-        const pcsN = Math.round(REP_TOKENS_PER_BATCH * 0.35);
-        const pltN = Math.round(REP_TOKENS_PER_BATCH * 0.35);
-        const manualN = REP_TOKENS_PER_BATCH - pcsN - pltN;
-        const laneList = [...Array(pcsN).fill('pcs'), ...Array(pltN).fill('plt'), ...Array(manualN).fill('manual')];
-        const batchId = w.batchesFormed + 1;
-        const tokens = laneList.map((lane) => {
-          const band = STORAGE_BANDS[laneToBand(lane)];
-          const startRow = rowInBand(band);
+      // -- advance cargo units (dock -> storage edge -> storage slot) --
+      const nextCargo = [];
+      for (const u of w.cargoUnits) {
+        const t = u.t + dt;
+        if (t < CARGO_DURATIONS[u.phase]) {
+          nextCargo.push({ ...u, t });
+          continue;
+        }
+        if (u.phase === 'toEdge') {
+          w.inboundPile = { ...w.inboundPile, [u.bandKey]: Math.max(0, (w.inboundPile[u.bandKey] || 0) - 1) };
+          const slot = { col: STORAGE_COL_RANGE[0] + Math.random() * (STORAGE_COL_RANGE[1] - STORAGE_COL_RANGE[0]), row: rowInBand(STORAGE_BANDS[u.bandKey]) };
+          nextCargo.push({ ...u, phase: 'toSlot', t: 0, from: u.to, to: slot });
+        } else if (u.phase === 'toSlot') {
+          w.storageCounts = { ...w.storageCounts, [u.bandKey]: (w.storageCounts[u.bandKey] || 0) + 1 };
+          w.totalAbsorbed += 1;
+          // dropped - absorbed into storage
+        } else {
+          nextCargo.push(u);
+        }
+      }
+      w.cargoUnits = nextCargo;
+
+      // ============ WMS: WCS decision #2 - order grouping ============
+      if (w.wmsTimer >= WMS_ORDER_INTERVAL_MS) {
+        w.wmsTimer = 0;
+        if (w.wmsOrdersSpawned < TOTAL_ORDERS) {
+          w.wmsOrdersSpawned += 1;
+          w.wmsPendingCount += 1;
+        }
+      }
+
+      if (w.wmsPendingCount >= w.wmsNextThreshold) {
+        const groupSize = w.wmsNextThreshold;
+        w.wmsPendingCount -= groupSize;
+        w.wmsNextThreshold = wmsThreshold();
+        const groupType = decideGroupType();
+        const groupId = w.wmsGroupsFormed + 1;
+        w.wmsGroupsFormed = groupId;
+        const tokens = Array.from({ length: GROUP_TOKENS_PER_GROUP }).map(() => {
+          const lane = pickPickingLane(groupType);
+          const sourceBand = LANE_SOURCE_BAND[lane];
           return {
             id: nextId(),
             lane,
-            phase: 'toSort',
+            groupType,
+            phase: 'toPicking',
             t: 0,
-            from: { col: STORAGE_COL_RANGE[1] + 1, row: startRow },
-            to: { col: SORT_COL, row: SORT_ROW },
-            pickingLane: lane === 'pcs' ? 'climber' : 'amr',
+            from: storageSourcePos(sourceBand),
+            to: pickingLanePos(lane),
+            sourceBand,
             rerouted: false,
           };
         });
-        w.batches = [...w.batches, { id: batchId, tokens, doneCount: 0 }];
-        w.storageCounts = {
-          climber: Math.max(0, w.storageCounts.climber - pcsN * 4),
-          shuttle: Math.max(0, w.storageCounts.shuttle - pltN * 4),
-          rack: Math.max(0, w.storageCounts.rack - manualN * 4),
-        };
-        w.batchesFormed = batchId;
-        pushEvent(`출고그룹 #${batchId} 편성 — 오더 100건 · 3D 소터 분류 시작`, 'info');
-        flashPulse(SORT_COL, SORT_ROW);
+        w.groups = [...w.groups, { id: groupId, type: groupType, size: groupSize, tokens, doneCount: 0 }];
+        pushEvent(
+          `WCS 그룹핑 — OG-${groupId} (${groupType === 'bulk' ? '총량피킹' : '오더피킹'}, ${groupSize}건)`,
+          'info'
+        );
+        flashPulse(PICKING_COL_RANGE[0] + 1, 5.5);
       }
 
-      // -- advance batch tokens --
-      const nextBatches = [];
-      for (const batch of w.batches) {
+      // -- advance order-group tokens --
+      const nextGroups = [];
+      for (const group of w.groups) {
         let doneDelta = 0;
         const nextTokens = [];
-        for (const tk of batch.tokens) {
+        for (const tk of group.tokens) {
           const t = tk.t + dt;
-          if (t < BATCH_DURATIONS[tk.phase]) {
+          if (t < GROUP_DURATIONS[tk.phase]) {
             nextTokens.push({ ...tk, t });
             continue;
           }
-          if (tk.phase === 'toSort') {
-            nextTokens.push({ ...tk, phase: 'atSort', t: 0 });
-          } else if (tk.phase === 'atSort') {
-            const laneInfo = PICKING_LANES[tk.pickingLane];
-            const row = laneInfo.rowRange[0] + Math.random() * (laneInfo.rowRange[1] - laneInfo.rowRange[0]);
-            nextTokens.push({ ...tk, phase: 'toPicking', t: 0, from: { col: SORT_COL, row: SORT_ROW }, to: { col: PICKING_COL_RANGE[0] + 1, row } });
-          } else if (tk.phase === 'toPicking') {
+          if (tk.phase === 'toPicking') {
             nextTokens.push({ ...tk, phase: 'atPicking', t: 0 });
           } else if (tk.phase === 'atPicking') {
+            w.storageCounts = { ...w.storageCounts, [tk.sourceBand]: Math.max(0, (w.storageCounts[tk.sourceBand] || 0) - 1) };
+            const fromPos = pickingLanePos(tk.lane);
+            if (tk.groupType === 'bulk') {
+              const sortHub = pickSortHub();
+              nextTokens.push({ ...tk, phase: 'toSort', t: 0, from: fromPos, to: sortHubPos(sortHub), sortHub });
+            } else {
+              const packMethod = pickPackMethod();
+              nextTokens.push({ ...tk, phase: 'toPacking', t: 0, from: fromPos, to: packingPos(packMethod), packMethod });
+            }
+          } else if (tk.phase === 'toSort') {
+            nextTokens.push({ ...tk, phase: 'atSort', t: 0 });
+          } else if (tk.phase === 'atSort') {
+            const packMethod = pickPackMethod();
+            nextTokens.push({ ...tk, phase: 'toPacking', t: 0, from: sortHubPos(tk.sortHub), to: packingPos(packMethod), packMethod });
+          } else if (tk.phase === 'toPacking') {
+            nextTokens.push({ ...tk, phase: 'atPacking', t: 0 });
+          } else if (tk.phase === 'atPacking') {
             const failedDockId = w.failure?.dockId;
             let dock = pickDock(OUTBOUND_DOCKS);
             if (failedDockId && dock.id === failedDockId) dock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId) || dock;
-            nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: { col: OUTBOUND_COL, row: dock.row }, dock });
+            nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: packingPos(tk.packMethod), to: outboundPos(dock), dock });
           } else if (tk.phase === 'toOutbound') {
             const failedDockId = w.failure?.dockId;
             if (failedDockId && tk.dock?.id === failedDockId) {
               const altDock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId);
-              nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: { col: OUTBOUND_COL, row: altDock.row }, dock: altDock, rerouted: true });
+              nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), dock: altDock, rerouted: true });
             } else {
               nextTokens.push({ ...tk, phase: 'atOutbound', t: 0 });
             }
@@ -237,20 +343,89 @@ export default function useSimulation() {
           }
         }
         if (doneDelta > 0) {
-          const doneCount = batch.doneCount + doneDelta;
-          if (doneCount >= REP_TOKENS_PER_BATCH) {
-            w.completedCount += BATCH_SIZE;
-            pushEvent(`출고그룹 #${batch.id} 출고 완료 — 100건 발송`, 'ok');
-            continue; // drop finished batch
+          const doneCount = group.doneCount + doneDelta;
+          if (doneCount >= GROUP_TOKENS_PER_GROUP) {
+            w.completedCount = Math.min(TOTAL_ORDERS, w.completedCount + group.size);
+            pushEvent(`OG-${group.id} 출고 완료 — ${group.size}건 발송`, 'ok');
+            continue; // drop finished group
           }
-          nextBatches.push({ ...batch, tokens: nextTokens, doneCount });
+          nextGroups.push({ ...group, tokens: nextTokens, doneCount });
         } else {
-          nextBatches.push({ ...batch, tokens: nextTokens });
+          nextGroups.push({ ...group, tokens: nextTokens });
         }
       }
-      w.batches = nextBatches;
+      w.groups = nextGroups;
 
-      // -- advance urgent tokens --
+      // ============ Shuttle -> pallet-unit direct shipment (skips picking & sort) ============
+      // Flat modulo-style check (not a cumulative watermark) so a shipment
+      // fires every time PALLET_SHIP_THRESHOLD units are sitting on the
+      // shuttle, regardless of how many shipments already went out.
+      if (w.storageCounts.shuttle >= PALLET_SHIP_THRESHOLD) {
+        w.storageCounts = { ...w.storageCounts, shuttle: w.storageCounts.shuttle - PALLET_SHIP_THRESHOLD };
+        const shipId = (w.palletShipments.length ? Math.max(...w.palletShipments.map((s) => s.id)) : 0) + 1;
+        const tokens = Array.from({ length: PALLET_SHIP_TOKENS }).map(() => {
+          const packMethod = pickPackMethod();
+          return {
+            id: nextId(),
+            phase: 'toPacking',
+            t: 0,
+            from: storageSourcePos('shuttle'),
+            to: packingPos(packMethod),
+            packMethod,
+            rerouted: false,
+          };
+        });
+        w.palletShipments = [...w.palletShipments, { id: shipId, size: PALLET_SHIP_THRESHOLD, tokens, doneCount: 0 }];
+        pushEvent(`4-Way 셔틀 — 팔레트 출고그룹 편성 (${PALLET_SHIP_THRESHOLD}건, 포장 후 즉시 출고)`, 'info');
+        flashPulse(PACKING_COL, 6);
+      }
+
+      const nextShipments = [];
+      for (const ship of w.palletShipments) {
+        let doneDelta = 0;
+        const nextTokens = [];
+        for (const tk of ship.tokens) {
+          const t = tk.t + dt;
+          if (t < PALLET_SHIP_DURATIONS[tk.phase]) {
+            nextTokens.push({ ...tk, t });
+            continue;
+          }
+          if (tk.phase === 'toPacking') {
+            nextTokens.push({ ...tk, phase: 'atPacking', t: 0 });
+          } else if (tk.phase === 'atPacking') {
+            const failedDockId = w.failure?.dockId;
+            let dock = pickDock(OUTBOUND_DOCKS);
+            if (failedDockId && dock.id === failedDockId) dock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId) || dock;
+            nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: packingPos(tk.packMethod), to: outboundPos(dock), dock });
+          } else if (tk.phase === 'toOutbound') {
+            const failedDockId = w.failure?.dockId;
+            if (failedDockId && tk.dock?.id === failedDockId) {
+              const altDock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId);
+              nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), dock: altDock, rerouted: true });
+            } else {
+              nextTokens.push({ ...tk, phase: 'atOutbound', t: 0 });
+            }
+          } else if (tk.phase === 'atOutbound') {
+            doneDelta += 1;
+          } else {
+            nextTokens.push(tk);
+          }
+        }
+        if (doneDelta > 0) {
+          const doneCount = ship.doneCount + doneDelta;
+          if (doneCount >= PALLET_SHIP_TOKENS) {
+            w.palletCompleted += ship.size;
+            pushEvent(`팔레트 출고그룹 #${ship.id} 완료 — ${ship.size}건 발송`, 'ok');
+            continue;
+          }
+          nextShipments.push({ ...ship, tokens: nextTokens, doneCount });
+        } else {
+          nextShipments.push({ ...ship, tokens: nextTokens });
+        }
+      }
+      w.palletShipments = nextShipments;
+
+      // -- advance urgent tokens (skip storage entirely, climber high-pass) --
       const nextUrgent = [];
       for (const tk of w.urgentTokens) {
         const t = tk.t + dt;
@@ -260,8 +435,8 @@ export default function useSimulation() {
         }
         if (tk.phase === 'toPicking') nextUrgent.push({ ...tk, phase: 'atPicking', t: 0 });
         else if (tk.phase === 'atPicking') {
-          const dock = OUTBOUND_DOCKS[0];
-          nextUrgent.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: { col: OUTBOUND_COL, row: dock.row } });
+          const dock = pickDock(OUTBOUND_DOCKS);
+          nextUrgent.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(dock) });
         } else if (tk.phase === 'toOutbound') nextUrgent.push({ ...tk, phase: 'atOutbound', t: 0 });
         else if (tk.phase === 'atOutbound') w.urgentCompleted += 1;
         else nextUrgent.push(tk);
@@ -297,22 +472,22 @@ export default function useSimulation() {
     fireCooldown('bottleneck', BOTTLENECK_DURATION_MS + 1500);
     const w = worldRef.current;
     w.bottleneck = { until: w.simClock + BOTTLENECK_DURATION_MS };
-    flashPulse(SORT_COL, SORT_ROW);
+    flashPulse(SORT_COL, SORT_HUBS.libiao.row);
     pushEvent('⚠ BOTTLENECK DETECTED — Libiao 3D 소터 허용량 초과', 'danger');
 
     setTimeout(() => {
       let rerouted = 0;
-      w.batches = w.batches.map((batch) => ({
-        ...batch,
-        tokens: batch.tokens.map((tk) => {
-          if ((tk.phase === 'atSort' || tk.phase === 'toPicking') && tk.pickingLane !== 'amr') {
+      w.groups = w.groups.map((group) => ({
+        ...group,
+        tokens: group.tokens.map((tk) => {
+          if ((tk.phase === 'toSort' || tk.phase === 'atSort') && tk.sortHub === 'libiao') {
             rerouted += 1;
-            return { ...tk, pickingLane: 'amr', rerouted: true };
+            return { ...tk, sortHub: 'das', to: tk.phase === 'toSort' ? sortHubPos('das') : tk.to, rerouted: true };
           }
           return tk;
         }),
       }));
-      pushEvent(`WCS OPTIMIZED — 대기 오더 ${rerouted}건 AMR&DPC 라인으로 우회 완료`, 'ok');
+      pushEvent(`WCS OPTIMIZED — 대기 오더 ${rerouted}건 DAS 라인으로 우회 완료`, 'ok');
       w.optimizationEvents += 1;
       w.leadTimeReduction = Math.min(42, w.leadTimeReduction + randInt(3, 6));
       commit();
@@ -324,7 +499,6 @@ export default function useSimulation() {
     fireCooldown('urgent', 3200);
     const w = worldRef.current;
     const dock = pickDock(INBOUND_DOCKS);
-    const climberRow = PICKING_LANES.climber.rowRange[0] + 1;
     w.urgentTokens = [
       ...w.urgentTokens,
       {
@@ -333,7 +507,7 @@ export default function useSimulation() {
         phase: 'toPicking',
         t: 0,
         from: { col: INBOUND_COL, row: dock.row },
-        to: { col: PICKING_COL_RANGE[0] + 1, row: climberRow },
+        to: pickingLanePos('climber'),
       },
     ];
     w.optimizationEvents += 1;
@@ -352,17 +526,16 @@ export default function useSimulation() {
 
     setTimeout(() => {
       let rerouted = 0;
-      w.batches = w.batches.map((batch) => ({
-        ...batch,
-        tokens: batch.tokens.map((tk) => {
-          if (tk.dock?.id === dock.id && (tk.phase === 'toOutbound' || tk.phase === 'atOutbound')) {
-            rerouted += 1;
-            const altDock = OUTBOUND_DOCKS.find((d) => d.id !== dock.id);
-            return { ...tk, dock: altDock, phase: 'toOutbound', t: 0, from: tk.to, to: { col: OUTBOUND_COL, row: altDock.row }, rerouted: true };
-          }
-          return tk;
-        }),
-      }));
+      const reroute = (tk) => {
+        if (tk.dock?.id === dock.id && (tk.phase === 'toOutbound' || tk.phase === 'atOutbound')) {
+          rerouted += 1;
+          const altDock = OUTBOUND_DOCKS.find((d) => d.id !== dock.id);
+          return { ...tk, dock: altDock, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), rerouted: true };
+        }
+        return tk;
+      };
+      w.groups = w.groups.map((group) => ({ ...group, tokens: group.tokens.map(reroute) }));
+      w.palletShipments = w.palletShipments.map((ship) => ({ ...ship, tokens: ship.tokens.map(reroute) }));
       pushEvent(`WCS 경로 재탐색 — 출고 대기 물량 ${rerouted}건 재할당`, 'ok');
       w.optimizationEvents += 1;
       w.leadTimeReduction = Math.min(42, w.leadTimeReduction + randInt(2, 4));
@@ -383,15 +556,21 @@ export default function useSimulation() {
     setRunning,
     speed,
     setSpeed,
-    inboundItems: snapshot.inboundItems,
-    batches: snapshot.batches,
-    urgentTokens: snapshot.urgentTokens,
+    vehicles: snapshot.vehicles,
+    cargoUnits: snapshot.cargoUnits,
+    inboundPile: snapshot.inboundPile,
     storageCounts: snapshot.storageCounts,
+    groups: snapshot.groups,
+    palletShipments: snapshot.palletShipments,
+    urgentTokens: snapshot.urgentTokens,
+    wmsPendingCount: snapshot.wmsPendingCount,
+    wmsOrdersSpawned: snapshot.wmsOrdersSpawned,
+    wmsGroupsFormed: snapshot.wmsGroupsFormed,
+    wmsNextThreshold: snapshot.wmsNextThreshold,
     totalAbsorbed: snapshot.totalAbsorbed,
-    totalSpawned: snapshot.totalSpawned,
-    batchesFormed: snapshot.batchesFormed,
     completedCount: snapshot.completedCount,
     urgentCompleted: snapshot.urgentCompleted,
+    palletCompleted: snapshot.palletCompleted,
     events,
     metrics: {
       optimizationEvents: snapshot.optimizationEvents,
