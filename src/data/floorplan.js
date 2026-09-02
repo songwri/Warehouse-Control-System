@@ -40,11 +40,15 @@ export const STORAGE_CAP_VISUAL = 260; // tiles' fill reads 100% at this count
 
 // ---- Picking (moved ahead of sort; 4 lanes) ----
 export const PICKING_COL_RANGE = [12, 14];
+// Four lanes across twelve rows means three rows of spacing, which projects
+// to 90px of horizontal offset between cards. Labels are kept short so a
+// card fits inside that offset and the lane below never covers the sub-line
+// of the lane above.
 export const PICKING_LANES = {
-  climber: { rowRange: [0, 2], label: '하이클라이머 피킹', sub: 'PCS 재고', icon: 'climber' },
-  amr: { rowRange: [3, 5], label: 'AMR', sub: '일반 팔레트랙', icon: 'amr' },
-  dpc: { rowRange: [6, 8], label: 'DPC 피킹카트', sub: '일반 팔레트랙', icon: 'dpc' },
-  dps: { rowRange: [9, 11], label: 'DPS', sub: 'Digital Picking', icon: 'dps' },
+  climber: { rowRange: [0, 2], label: '하이클라이머', sub: 'PCS 재고', icon: 'climber' },
+  amr: { rowRange: [3, 5], label: 'AMR', sub: '팔레트랙', icon: 'amr' },
+  dpc: { rowRange: [6, 8], label: 'DPC 카트', sub: '팔레트랙', icon: 'dpc' },
+  dps: { rowRange: [9, 11], label: 'DPS', sub: '디지털 피킹', icon: 'dps' },
 };
 
 // ---- Sort (optional - only bulk-picked/총량피킹 groups pass through) ----
@@ -54,7 +58,7 @@ export const SORT_COL = 18;
 // picking zone's green to read as "no sort - straight to packing".
 export const BYPASS_ROW_MAX = 2;
 export const BYPASS_ROW = 1;
-export const BYPASS_COLOR = '#34d399';
+export const BYPASS_COLOR = '#3bab84';
 export const SORT_HUBS = {
   libiao: { row: 3, label: 'Libiao 3D 소터', icon: 'sorter' },
   das: { row: 8, label: 'DAS', sub: 'Digital Assort', icon: 'das' },
@@ -77,13 +81,20 @@ export const OUTBOUND_DOCKS = [
 
 // Visual zone bands (floor tint), one wider than the equipment's own
 // col constants so each zone reads as a real region, not a sliver.
+//
+// These hues are deliberately DESATURATED versions of the token colours. The
+// board carries two colour systems at once: moving order tokens (LANE_COLOR
+// and the group-type colours) stay full strength because they are the thing
+// you are meant to track, while everything static - floor tint, zone tags,
+// equipment card borders - sits one chroma step back. Before, six saturated
+// zone hues competed with four saturated token hues and nothing led the eye.
 export const ZONES = [
-  { key: 'inbound', label: '입고 · INBOUND', colRange: [0, 2], color: '#22d3ee' },
-  { key: 'storage', label: '보관 · STORAGE', colRange: [3, 10], color: '#60a5fa' },
-  { key: 'picking', label: '피킹 · PICKING', colRange: [11, 15], color: '#34d399' },
-  { key: 'sort', label: '분류 · SORT (선택)', colRange: [16, 19], color: '#c084fc' },
-  { key: 'packing', label: '포장 · PACKING', colRange: [20, 24], color: '#fb923c' },
-  { key: 'outbound', label: '출고 · OUTBOUND', colRange: [25, 29], color: '#f59e0b' },
+  { key: 'inbound', label: '입고 · INBOUND', colRange: [0, 2], color: '#3aa8bd' },
+  { key: 'storage', label: '보관 · STORAGE', colRange: [3, 10], color: '#5188cf' },
+  { key: 'picking', label: '피킹 · PICKING', colRange: [11, 15], color: '#3bab84' },
+  { key: 'sort', label: '분류 · SORT (선택)', colRange: [16, 19], color: '#9a7ad4' },
+  { key: 'packing', label: '포장 · PACKING', colRange: [20, 24], color: '#cc7f45' },
+  { key: 'outbound', label: '출고 · OUTBOUND', colRange: [25, 29], color: '#c9902f' },
 ];
 
 export function zoneOfCol(col) {

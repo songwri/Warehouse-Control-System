@@ -73,7 +73,7 @@ function OkStamp({ accent }) {
       initial={{ opacity: 0, scale: 0.5 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.32, ease: [0.175, 0.885, 0.32, 1.4] }}
-      className="ml-2 inline-flex flex-shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 align-middle font-mono text-[11px] font-bold"
+      className="ml-2 inline-flex flex-shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 align-middle font-mono text-ui-meta font-bold"
       style={{ color: '#34d399', borderColor: 'rgba(52,211,153,.55)', background: 'rgba(52,211,153,.12)' }}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
@@ -167,16 +167,16 @@ export default function DecisionStory({ story, onFinish }) {
               exit={{ opacity: 0, y: -12, scale: 0.97 }}
               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
               className="w-[760px] max-w-[94vw] rounded-2xl border px-9 py-8 shadow-2xl"
-              style={{ background: '#070a12', borderColor: tone.border, boxShadow: `0 0 70px -14px ${tone.accent}` }}
+              style={{ background: '#0a0f1b', borderColor: tone.border, boxShadow: `0 0 70px -14px ${tone.accent}` }}
             >
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center justify-between border-b border-ink-700 pb-4">
                 <div className="flex items-center gap-3">
                   <span className="h-2.5 w-2.5 rounded-full pulse-ring" style={{ background: tone.accent }} />
                   <span className="font-display text-xl font-bold tracking-wide" style={{ color: tone.accent }}>
                     {story.title}
                   </span>
                 </div>
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                <span className="font-mono text-ui-micro uppercase tracking-[0.18em] text-slate-500">
                   Simulation Paused
                 </span>
               </div>
@@ -208,13 +208,13 @@ export default function DecisionStory({ story, onFinish }) {
                         </motion.div>
                         <div className="flex flex-col items-center gap-0.5">
                           <span
-                            className="text-[14px] font-bold"
+                            className="text-ui-card font-bold"
                             style={{ color: lit ? '#f1f5f9' : '#64748b' }}
                           >
                             {stage.label}
                           </span>
                           <span
-                            className="font-mono text-[9.5px] uppercase tracking-[0.18em]"
+                            className="font-mono text-ui-micro uppercase tracking-[0.18em]"
                             style={{ color: lit ? tone.accent : '#475569' }}
                           >
                             {stage.sub}
@@ -222,7 +222,7 @@ export default function DecisionStory({ story, onFinish }) {
                         </div>
                       </div>
                       {i < STAGES.length - 1 && (
-                        <div className="mt-8 h-0.5 w-full max-w-[86px] flex-shrink overflow-hidden rounded-full bg-slate-700/70">
+                        <div className="mt-8 h-0.5 w-full max-w-[86px] flex-shrink overflow-hidden rounded-full bg-ink-700">
                           <motion.div
                             className="h-full rounded-full"
                             style={{ background: tone.accent }}
@@ -237,7 +237,7 @@ export default function DecisionStory({ story, onFinish }) {
               </div>
 
               {/* the reasoning, typed out one line at a time */}
-              <div className="mt-7 min-h-[128px] rounded-xl border border-slate-800 bg-black/45 px-5 py-4">
+              <div className="mt-7 min-h-[128px] rounded-xl border border-ink-700 bg-ink-950/70 px-5 py-4">
                 <ol className="flex flex-col gap-3">
                   {lines.map((line, i) => {
                     const chars = typedCount(i);
@@ -246,12 +246,12 @@ export default function DecisionStory({ story, onFinish }) {
                     return (
                       <li key={i} className="flex items-start gap-2.5">
                         <span
-                          className="mt-[3px] font-mono text-[11px] font-bold"
+                          className="mt-[3px] font-mono text-ui-meta font-bold"
                           style={{ color: tone.accent }}
                         >
                           {String(i + 1).padStart(2, '0')}
                         </span>
-                        <span className="text-[15px] leading-relaxed text-slate-100">
+                        <span className="text-ui-lead leading-relaxed text-slate-100">
                           {line.slice(0, chars)}
                           {typing && (
                             <span className="ml-0.5 inline-block h-[15px] w-[7px] translate-y-[2px] bg-slate-100 blink-fast" />
@@ -264,7 +264,7 @@ export default function DecisionStory({ story, onFinish }) {
                 </ol>
               </div>
 
-              <div className="mt-5 h-1 w-full overflow-hidden rounded-full bg-slate-800">
+              <div className="mt-5 h-1 w-full overflow-hidden rounded-full bg-ink-800">
                 <div
                   className="h-full rounded-full transition-[width] duration-100 ease-linear"
                   style={{ background: tone.accent, width: `${Math.min(100, (elapsed / TOTAL_MS) * 100)}%` }}
@@ -288,9 +288,9 @@ export default function DecisionStory({ story, onFinish }) {
           transition={{ duration: 0.35 }}
           className="absolute left-4 top-4 z-[70] w-[360px] rounded-xl border border-accent-soft/40 bg-ink-950/95 px-4 py-3.5 shadow-2xl backdrop-blur-md"
         >
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+          <div className="flex items-center gap-2 border-b border-ink-700 pb-2">
             <span className="h-1.5 w-1.5 rounded-full bg-accent-soft pulse-ring" />
-            <span className="font-display text-[11px] font-semibold uppercase tracking-wider text-accent-soft">
+            <span className="font-display text-ui-meta font-semibold uppercase tracking-wider text-accent-soft">
               {story.title}
             </span>
           </div>
@@ -302,7 +302,7 @@ export default function DecisionStory({ story, onFinish }) {
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3 }}
-                    className={`flex items-start gap-2 text-[12.5px] leading-snug ${
+                    className={`flex items-start gap-2 text-ui-body leading-snug ${
                       i === revealed - 1 ? 'text-slate-100' : 'text-slate-500'
                     }`}
                   >

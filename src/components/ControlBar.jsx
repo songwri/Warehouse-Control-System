@@ -1,16 +1,32 @@
-function TriggerButton({ label, sub, tone, onClick, disabled }) {
+import { TOTAL_ORDERS } from '../hooks/useSimulation.js';
+
+// One command bar. The app previously carried a brand header and a separate
+// control strip stacked on top of each other, which spent ~100px of vertical
+// room on two weak edges and split "what is this" from "how do I drive it".
+// Merged: identity left, transport in the middle, scenario triggers right.
+function TriggerButton({ index, label, sub, tone, onClick, disabled }) {
   const toneMap = {
-    danger: 'border-red-500/50 text-red-300 hover:bg-red-500/15',
-    urgent: 'border-amber-500/50 text-amber-300 hover:bg-amber-500/15',
+    danger: { border: 'rgba(239,83,80,.45)', text: '#f3928f', hover: 'rgba(239,83,80,.14)' },
+    warn: { border: 'rgba(229,165,60,.45)', text: '#eabc71', hover: 'rgba(229,165,60,.14)' },
   };
+  const t = toneMap[tone];
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`px-3 py-2 rounded-lg border font-body text-left transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${toneMap[tone]}`}
+      style={{ borderColor: t.border, color: t.text, '--hover': t.hover }}
+      className="group flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--hover)] disabled:cursor-not-allowed disabled:opacity-30"
     >
-      <div className="text-xs font-semibold leading-tight">{label}</div>
-      <div className="text-[10px] font-mono opacity-70 leading-tight">{sub}</div>
+      <span
+        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded font-mono text-ui-micro font-bold"
+        style={{ background: t.hover, color: t.text }}
+      >
+        {index}
+      </span>
+      <span className="leading-none">
+        <span className="block text-ui-body font-semibold leading-tight">{label}</span>
+        <span className="block font-mono text-ui-micro uppercase leading-tight opacity-60">{sub}</span>
+      </span>
     </button>
   );
 }
@@ -25,28 +41,46 @@ export default function ControlBar({
   onFailure,
   onReset,
   cooldown,
+  completed,
+  urgentCompleted,
 }) {
   return (
-    <div className="flex items-center gap-3 flex-wrap px-4 py-2.5 border-b border-slate-800 bg-ink-900/80">
+    <header className="flex flex-shrink-0 items-center gap-4 border-b border-ink-700 bg-ink-900 px-4 py-2.5">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-blue-800 font-display text-ui-lead font-bold text-white">
+          W
+        </span>
+        <span className="leading-none">
+          <span className="block font-display text-ui-lead font-bold tracking-tight text-slate-100">
+            WCS Simulator
+          </span>
+          <span className="block font-mono text-ui-micro uppercase tracking-[0.12em] text-slate-500">
+            Warehouse Control System
+          </span>
+        </span>
+      </div>
+
+      <span className="h-8 w-px bg-ink-700" />
+
       <div className="flex items-center gap-1.5">
         <button
           onClick={() => setRunning((r) => !r)}
-          className="w-9 h-9 rounded-lg bg-accent hover:bg-blue-500 flex items-center justify-center text-white transition-colors"
+          className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent-soft"
           title={running ? '일시정지' : '재생'}
         >
           {running ? (
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
           ) : (
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor"><path d="M6 4l14 8-14 8z" /></svg>
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M6 4l14 8-14 8z" /></svg>
           )}
         </button>
-        <div className="flex rounded-lg overflow-hidden border border-slate-700">
+        <div className="flex overflow-hidden rounded-lg border border-ink-700">
           {[1, 2].map((s) => (
             <button
               key={s}
               onClick={() => setSpeed(s)}
-              className={`px-2.5 py-1.5 text-xs font-mono font-semibold transition-colors ${
-                speed === s ? 'bg-accent text-white' : 'bg-transparent text-slate-400 hover:bg-slate-800'
+              className={`px-2.5 py-2 font-mono text-ui-meta font-bold transition-colors ${
+                speed === s ? 'bg-accent text-white' : 'text-slate-500 hover:bg-ink-800 hover:text-slate-300'
               }`}
             >
               {s}x
@@ -55,39 +89,44 @@ export default function ControlBar({
         </div>
         <button
           onClick={onReset}
-          className="px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800 text-xs font-mono"
+          className="rounded-lg border border-ink-700 px-2.5 py-2 font-mono text-ui-meta text-slate-500 transition-colors hover:bg-ink-800 hover:text-slate-300"
           title="시나리오 초기화"
         >
           RESET
         </button>
       </div>
 
-      <div className="w-px h-8 bg-slate-800" />
-
-      <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Event Trigger</span>
-      <div className="flex items-center gap-2">
-        <TriggerButton
-          label="① 병목 발생"
-          sub="Bottleneck"
-          tone="danger"
-          onClick={onBottleneck}
-          disabled={cooldown.bottleneck}
-        />
-        <TriggerButton
-          label="② 긴급 오더 투입"
-          sub="Urgent Order"
-          tone="urgent"
-          onClick={onUrgent}
-          disabled={cooldown.urgent}
-        />
-        <TriggerButton
-          label="③ 설비 고장"
-          sub="Equipment Failure"
-          tone="danger"
-          onClick={onFailure}
-          disabled={cooldown.failure}
-        />
+      {/* Run progress, as the one figure that belongs up here: how far
+          through the 1,000-order scenario this run is. The absolute totals
+          live in the dashboard strip and are not repeated. */}
+      <span className="h-8 w-px bg-ink-700" />
+      <div className="flex items-center gap-2.5">
+        <span className="font-mono text-ui-micro uppercase tracking-[0.12em] text-slate-500">진행률</span>
+        <div className="h-1.5 w-28 overflow-hidden rounded-full bg-ink-800">
+          <div
+            className="h-full rounded-full bg-ok transition-[width] duration-500"
+            style={{ width: `${Math.min(100, (completed / TOTAL_ORDERS) * 100)}%` }}
+          />
+        </div>
+        <span className="font-mono text-ui-meta tabular-nums text-slate-400">
+          {completed.toLocaleString()}
+          <span className="text-slate-600"> / {TOTAL_ORDERS.toLocaleString()}</span>
+        </span>
+        {urgentCompleted > 0 && (
+          <span className="rounded border border-warn/40 px-1.5 py-0.5 font-mono text-ui-micro text-warn">
+            긴급 {urgentCompleted}
+          </span>
+        )}
       </div>
-    </div>
+
+      <div className="ml-auto flex items-center gap-2.5">
+        <span className="font-mono text-ui-micro uppercase tracking-[0.14em] text-slate-600">Event Trigger</span>
+        <div className="flex items-center gap-2">
+          <TriggerButton index="1" label="병목 발생" sub="Bottleneck" tone="danger" onClick={onBottleneck} disabled={cooldown.bottleneck} />
+          <TriggerButton index="2" label="긴급 오더" sub="Urgent Order" tone="warn" onClick={onUrgent} disabled={cooldown.urgent} />
+          <TriggerButton index="3" label="설비 고장" sub="Equipment Failure" tone="danger" onClick={onFailure} disabled={cooldown.failure} />
+        </div>
+      </div>
+    </header>
   );
 }

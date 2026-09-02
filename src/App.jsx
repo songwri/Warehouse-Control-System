@@ -1,4 +1,4 @@
-import useSimulation, { TOTAL_ORDERS } from './hooks/useSimulation.js';
+import useSimulation from './hooks/useSimulation.js';
 import ControlBar from './components/ControlBar.jsx';
 import IsoWarehouse from './components/IsoWarehouse.jsx';
 import Dashboard from './components/Dashboard.jsx';
@@ -10,25 +10,7 @@ export default function App() {
   const sim = useSimulation();
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-ink-950 text-slate-100 font-body">
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-blue-700 flex items-center justify-center font-display font-bold text-sm">
-            W
-          </div>
-          <div>
-            <h1 className="font-display text-base font-semibold leading-tight">WCS Simulator</h1>
-            <p className="text-[10px] font-mono text-slate-500 leading-tight">
-              Warehouse Control System · 입고 누적 {sim.dash.totalAbsorbed}건
-            </p>
-          </div>
-        </div>
-        <div className="text-[10px] font-mono text-slate-500">
-          출고완료 {sim.dash.completedCount} / {TOTAL_ORDERS}
-          {sim.dash.urgentCompleted > 0 && <span className="text-amber-400 ml-1.5">+ 긴급 {sim.dash.urgentCompleted}건</span>}
-        </div>
-      </header>
-
+    <div className="flex h-screen w-screen flex-col bg-ink-950 font-body text-slate-100">
       <ControlBar
         running={sim.running}
         setRunning={sim.setRunning}
@@ -39,9 +21,15 @@ export default function App() {
         onFailure={sim.triggerFailure}
         onReset={sim.reset}
         cooldown={sim.triggerCooldown}
+        completed={sim.dash.completedCount}
+        urgentCompleted={sim.dash.urgentCompleted}
       />
 
-      <main className="relative flex-1 min-h-0 flex flex-col px-4 py-3">
+      {/* board + a single right rail. The WMS gauge and the decision ledger
+          used to float at two different widths and two different insets,
+          which left a ragged edge down the right of the screen; they are now
+          one column, so every panel shares an alignment edge. */}
+      <main className="relative flex min-h-0 flex-1 gap-3 px-3 py-3">
         <IsoWarehouse
           vehicles={sim.vehicles}
           cargoUnits={sim.cargoUnits}
@@ -56,8 +44,17 @@ export default function App() {
           callouts={sim.callouts}
           coreCaption={sim.coreCaption}
         />
-        <WmsPanel pendingCount={sim.wmsPendingCount} ordersSpawned={sim.wmsOrdersSpawned} groupsFormed={sim.wmsGroupsFormed} />
-        <DecisionLedger counts={sim.dash.counts} latestEvent={sim.events[sim.events.length - 1]} />
+
+        <aside className="flex w-[264px] flex-shrink-0 flex-col gap-3">
+          <WmsPanel
+            pendingCount={sim.wmsPendingCount}
+            ordersSpawned={sim.wmsOrdersSpawned}
+            groupsFormed={sim.wmsGroupsFormed}
+            threshold={sim.dash.wmsNextThreshold}
+          />
+          <DecisionLedger counts={sim.dash.counts} latestEvent={sim.events[sim.events.length - 1]} />
+        </aside>
+
         {/* corner variant anchors inside <main>; the modal variant is fixed
             and covers the whole viewport regardless of where it mounts */}
         <DecisionStory story={sim.story} onFinish={sim.finishStory} />

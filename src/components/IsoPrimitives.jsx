@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { isoPoint, depthOf, TILE_W, TILE_H } from '../lib/iso.js';
 import EquipIcon from './EquipIcon.jsx';
 
-const CALLOUT_TONE = { info: '#93c5fd', ok: '#34d399', urgent: '#fbbf24' };
+const CALLOUT_TONE = { info: '#8fb8ff', ok: '#3ecf8e', urgent: '#e5a53c' };
 
 function withAlpha(hex, alpha) {
   const h = hex.replace('#', '');
@@ -59,7 +59,7 @@ export function IsoBuilding({ col, row, width = 92, elevation = 46, borderColor,
           top: baseY - elevation,
           width,
           borderColor,
-          background: 'linear-gradient(180deg, rgba(255,255,255,.09), rgba(20,26,38,.92))',
+          background: 'linear-gradient(180deg, rgba(24,33,53,.96), rgba(10,15,27,.95))',
           boxShadow: active
             ? `0 0 22px -2px ${glow}, 0 10px 18px -8px rgba(0,0,0,.7)`
             : '0 10px 18px -8px rgba(0,0,0,.7)',
@@ -142,7 +142,7 @@ export function PileStack({ col, row, count, color, cap = 5, elevation = 8 }) {
           }}
         />
       ))}
-      <span className="text-[10px] font-mono font-bold text-slate-100 mt-1 drop-shadow">{count}</span>
+      <span className="mt-1 font-mono text-ui-micro font-bold tracking-normal text-slate-100 drop-shadow">{count}</span>
     </div>
   );
 }
@@ -165,9 +165,9 @@ export function Callout({ col, row, text, tone = 'info', elevation = 78 }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -8, scale: 0.95 }}
         transition={{ duration: 0.25 }}
-        className="whitespace-nowrap rounded-md border px-2.5 py-1 text-[12px] font-mono font-semibold"
+        className="whitespace-nowrap rounded-md border px-2.5 py-1 font-mono text-ui-body font-semibold"
         style={{
-          background: 'rgba(6,9,15,.94)',
+          background: 'rgba(10,15,27,.96)',
           borderColor: `${color}80`,
           color,
           boxShadow: `0 4px 12px -4px rgba(0,0,0,.7), 0 0 10px -4px ${color}`,
