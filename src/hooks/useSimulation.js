@@ -31,13 +31,15 @@ import {
 import { VEHICLE_DURATIONS, CARGO_DURATIONS, GROUP_DURATIONS, PALLET_SHIP_DURATIONS, URGENT_DURATIONS } from '../data/timings.js';
 
 const TICK_MS = 100;
-const VEHICLE_SPAWN_INTERVAL_MS = 1300; // sim-time between inbound truck spawn attempts at 1x
-const WMS_ORDER_INTERVAL_MS = 260; // sim-time between orders landing in the WMS queue at 1x
-const GROUP_TOKENS_PER_GROUP = 16; // representative tokens standing in for a real order-group
+const VEHICLE_SPAWN_INTERVAL_MS = 1900; // sim-time between inbound truck spawn attempts at 1x
+const WMS_ORDER_INTERVAL_MS = 340; // sim-time between orders landing in the WMS queue at 1x
+const GROUP_TOKENS_PER_GROUP = 7; // representative tokens standing in for a real order-group - kept low so each one is trackable
 const PALLET_SHIP_THRESHOLD = 32; // shuttle units accumulated before a pallet shipment forms
-const PALLET_SHIP_TOKENS = 6;
+const PALLET_SHIP_TOKENS = 4;
 const BOTTLENECK_DURATION_MS = 6500;
 const FAILURE_DURATION_MS = 7500;
+const CALLOUT_MS = 2400; // how long a "why" callout stays over its building
+const CORE_CAPTION_MS = 2600; // how long the WCS core's current-reasoning caption stays up
 
 // Picking lanes climber/amr/dpc/dps all draw from a storage band; climber
 // serves its own PCS stock, the other three pull general-rack stock.
@@ -79,7 +81,27 @@ function freshWorld() {
     story: null,
     storyInboundShown: false,
     storyGroupShown: false,
+    callouts: [],
+    coreCaption: null,
   };
+}
+
+// A short-lived floating "why" label anchored over a specific building -
+// makes an individual unit's routing reason legible instead of it just
+// flowing past. Callouts already active at the same building stack
+// upward (extra elevation) instead of overlapping illegibly.
+function addCallout(w, col, row, text, tone = 'info') {
+  const stackIndex = w.callouts.filter((c) => c.col === col && Math.round(c.baseRow) === Math.round(row)).length;
+  w.callouts = [
+    ...w.callouts,
+    { id: nextId(), col, row, baseRow: row, elevation: 78 + stackIndex * 26, text, tone, until: w.simClock + CALLOUT_MS },
+  ];
+}
+
+// The WCS core's running "what am I deciding right now" readout - updated
+// on every vehicle- and group-level decision, not just the one-time story.
+function setCoreCaption(w, text) {
+  w.coreCaption = { id: nextId(), text, until: w.simClock + CORE_CAPTION_MS };
 }
 
 function pickingLanePos(lane) {
@@ -96,6 +118,10 @@ function outboundPos(dock) {
 }
 function storageSourcePos(bandKey) {
   return { col: STORAGE_COL_RANGE[1] + 1, row: rowInBand(STORAGE_BANDS[bandKey]) };
+}
+function storageBuildingPos(bandKey) {
+  const band = STORAGE_BANDS[bandKey];
+  return { col: STORAGE_COL_RANGE[0] + 1, row: (band.rowRange[0] + band.rowRange[1]) / 2 };
 }
 
 // All mutation below operates synchronously on a single mutable `world`
@@ -152,6 +178,8 @@ export default function useSimulation() {
       bottleneck: w.bottleneck,
       failure: w.failure,
       story: w.story,
+      callouts: w.callouts,
+      coreCaption: w.coreCaption,
     });
   }, []);
 
@@ -207,6 +235,7 @@ export default function useSimulation() {
             'info'
           );
           flashPulse(bandPos.col, bandPos.row);
+          setCoreCaption(w, `판단: ${v.dock.method} 입고 → ${STORAGE_BANDS[bandKey].label} 배정`);
           if (!w.storyInboundShown) {
             w.storyInboundShown = true;
             w.story = {
@@ -228,7 +257,7 @@ export default function useSimulation() {
           // spawn cargo units - a pallet is one large unit, a box vehicle
           // unloads several small units, staggered so they visibly trickle out.
           const isPallet = v.cargoType === 'pallet';
-          const unitCount = isPallet ? 1 : randInt(3, 6);
+          const unitCount = isPallet ? 1 : randInt(2, 4);
           for (let i = 0; i < unitCount; i++) {
             const dockPos = { col: INBOUND_COL, row: v.dock.row };
             const edge = { col: STORAGE_COL_RANGE[0] - 1, row: rowInBand(STORAGE_BANDS[v.bandKey]) };
@@ -236,8 +265,9 @@ export default function useSimulation() {
               id: nextId(),
               kind: isPallet ? 'pallet' : 'box',
               bandKey: v.bandKey,
+              vehicleMethod: v.dock.method,
               phase: 'toEdge',
-              t: -i * 220,
+              t: -i * 300,
               from: dockPos,
               to: edge,
             });
@@ -265,6 +295,8 @@ export default function useSimulation() {
         } else if (u.phase === 'toSlot') {
           w.storageCounts = { ...w.storageCounts, [u.bandKey]: (w.storageCounts[u.bandKey] || 0) + 1 };
           w.totalAbsorbed += 1;
+          const bPos = storageBuildingPos(u.bandKey);
+          addCallout(w, bPos.col, bPos.row, `+1 입고 — ${u.vehicleMethod} 지시`, 'ok');
           // dropped - absorbed into storage
         } else {
           nextCargo.push(u);
@@ -288,7 +320,10 @@ export default function useSimulation() {
         const groupType = decideGroupType();
         const groupId = w.wmsGroupsFormed + 1;
         w.wmsGroupsFormed = groupId;
-        const tokens = Array.from({ length: GROUP_TOKENS_PER_GROUP }).map(() => {
+        // Staggered negative `t` (like cargo units) so the group's tokens
+        // don't move in lockstep as one indistinguishable clump - each
+        // order visibly departs storage and arrives at picking on its own.
+        const tokens = Array.from({ length: GROUP_TOKENS_PER_GROUP }).map((_, i) => {
           const lane = pickPickingLane(groupType);
           const sourceBand = LANE_SOURCE_BAND[lane];
           return {
@@ -296,7 +331,7 @@ export default function useSimulation() {
             lane,
             groupType,
             phase: 'toPicking',
-            t: 0,
+            t: -i * 480,
             from: storageSourcePos(sourceBand),
             to: pickingLanePos(lane),
             sourceBand,
@@ -307,6 +342,7 @@ export default function useSimulation() {
         const pickTypeLabel = groupType === 'bulk' ? '총량피킹' : '오더피킹';
         pushEvent(`WCS 그룹핑 — OG-${groupId} (${pickTypeLabel}, ${groupSize}건)`, 'info');
         flashPulse(PICKING_COL_RANGE[0] + 1, 5.5);
+        setCoreCaption(w, `판단: OG-${groupId} ${groupSize}건 → ${pickTypeLabel} 편성`);
 
         if (!w.storyGroupShown) {
           w.storyGroupShown = true;
@@ -339,6 +375,8 @@ export default function useSimulation() {
             nextTokens.push({ ...tk, phase: 'atPicking', t: 0 });
           } else if (tk.phase === 'atPicking') {
             w.storageCounts = { ...w.storageCounts, [tk.sourceBand]: Math.max(0, (w.storageCounts[tk.sourceBand] || 0) - 1) };
+            const srcPos = storageBuildingPos(tk.sourceBand);
+            addCallout(w, srcPos.col, srcPos.row, `오더 발생 — ${PICKING_LANES[tk.lane].label} 피킹 (-1)`, 'urgent');
             const fromPos = pickingLanePos(tk.lane);
             if (tk.groupType === 'bulk') {
               const sortHub = pickSortHub();
@@ -394,12 +432,12 @@ export default function useSimulation() {
       if (w.storageCounts.shuttle >= PALLET_SHIP_THRESHOLD) {
         w.storageCounts = { ...w.storageCounts, shuttle: w.storageCounts.shuttle - PALLET_SHIP_THRESHOLD };
         const shipId = (w.palletShipments.length ? Math.max(...w.palletShipments.map((s) => s.id)) : 0) + 1;
-        const tokens = Array.from({ length: PALLET_SHIP_TOKENS }).map(() => {
+        const tokens = Array.from({ length: PALLET_SHIP_TOKENS }).map((_, i) => {
           const packMethod = pickPackMethod();
           return {
             id: nextId(),
             phase: 'toPacking',
-            t: 0,
+            t: -i * 480,
             from: storageSourcePos('shuttle'),
             to: packingPos(packMethod),
             packMethod,
@@ -409,6 +447,9 @@ export default function useSimulation() {
         w.palletShipments = [...w.palletShipments, { id: shipId, size: PALLET_SHIP_THRESHOLD, tokens, doneCount: 0 }];
         pushEvent(`4-Way 셔틀 — 팔레트 출고그룹 편성 (${PALLET_SHIP_THRESHOLD}건, 포장 후 즉시 출고)`, 'info');
         flashPulse(PACKING_COL, 6);
+        setCoreCaption(w, `판단: 4-Way 셔틀 팔레트 ${PALLET_SHIP_THRESHOLD}건 → 즉시 출고`);
+        const shuttlePos = storageBuildingPos('shuttle');
+        addCallout(w, shuttlePos.col, shuttlePos.row, `오더 발생 — 팔레트 직송 출고 (-${PALLET_SHIP_THRESHOLD})`, 'urgent');
       }
 
       const nextShipments = [];
@@ -474,7 +515,9 @@ export default function useSimulation() {
       }
       w.urgentTokens = nextUrgent;
 
-      // -- trigger expiry --
+      // -- trigger / callout / core-caption expiry --
+      if (w.callouts.length) w.callouts = w.callouts.filter((c) => c.until > w.simClock);
+      if (w.coreCaption && w.simClock >= w.coreCaption.until) w.coreCaption = null;
       if (w.bottleneck && w.simClock >= w.bottleneck.until) w.bottleneck = null;
       if (w.failure && w.simClock >= w.failure.until) {
         pushEvent(`${w.failure.dockId} 복구 완료 — 정상 라인으로 전환`, 'ok');
@@ -611,6 +654,8 @@ export default function useSimulation() {
     bottleneck: snapshot.bottleneck,
     failure: snapshot.failure,
     story: snapshot.story,
+    callouts: snapshot.callouts,
+    coreCaption: snapshot.coreCaption,
     pulse,
     triggerCooldown,
     triggerBottleneck,

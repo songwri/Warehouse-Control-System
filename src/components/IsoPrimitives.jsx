@@ -1,5 +1,8 @@
+import { motion } from 'framer-motion';
 import { isoPoint, depthOf, TILE_W, TILE_H } from '../lib/iso.js';
 import EquipIcon from './EquipIcon.jsx';
+
+const CALLOUT_TONE = { info: '#93c5fd', ok: '#34d399', urgent: '#fbbf24' };
 
 export function IsoTile({ col, row, color, opacity = 1, filled = false }) {
   const { x, y } = isoPoint(col, row);
@@ -123,6 +126,34 @@ export function PileStack({ col, row, count, color, cap = 5, elevation = 8 }) {
       ))}
       <span className="text-[8px] font-mono font-semibold text-slate-200 mt-1 drop-shadow">{count}</span>
     </div>
+  );
+}
+
+// A short-lived floating "why" chip above a building - the answer to
+// "what just happened here, and because of what decision".
+export function Callout({ col, row, text, tone = 'info', elevation = 78 }) {
+  const { x, y } = isoPoint(col, row, elevation);
+  const color = CALLOUT_TONE[tone] || CALLOUT_TONE.info;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.95 }}
+      transition={{ duration: 0.25 }}
+      className="absolute whitespace-nowrap rounded-md border px-2 py-1 text-[10.5px] font-mono font-semibold pointer-events-none"
+      style={{
+        left: x,
+        top: y,
+        transform: 'translate(-50%, -100%)',
+        background: 'rgba(6,9,15,.94)',
+        borderColor: `${color}80`,
+        color,
+        zIndex: depthOf(col, row) + 4000,
+        boxShadow: `0 4px 12px -4px rgba(0,0,0,.7), 0 0 10px -4px ${color}`,
+      }}
+    >
+      {text}
+    </motion.div>
   );
 }
 

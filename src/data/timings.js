@@ -7,19 +7,21 @@
 export const VEHICLE_DURATIONS = { arriving: 700, arrived: 650, analyzing: 700, unloading: 550, leaving: 650 };
 
 // One cargo unit (a box, or a pallet) traveling from the dock into its
-// storage slot once the vehicle has classified it.
-export const CARGO_DURATIONS = { toEdge: 500, toSlot: 450 };
+// storage slot once the vehicle has classified it. Slowed down from the
+// original pass so a viewer at 1x can actually track one unit's path
+// instead of it flashing by.
+export const CARGO_DURATIONS = { toEdge: 750, toSlot: 700 };
 
 // A picked/grouped order token: picking -> optional sort -> packing -> outbound.
 export const GROUP_DURATIONS = {
-  toPicking: 750,
-  atPicking: 550,
-  toSort: 650,
-  atSort: 550,
-  toPacking: 700,
-  atPacking: 400,
-  toOutbound: 800,
-  atOutbound: 400,
+  toPicking: 1000,
+  atPicking: 900,
+  toSort: 850,
+  atSort: 850,
+  toPacking: 900,
+  atPacking: 650,
+  toOutbound: 1000,
+  atOutbound: 650,
 };
 
 // A shuttle pallet shipment: already unit-of-issue, so it skips picking

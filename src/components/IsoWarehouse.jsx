@@ -30,7 +30,7 @@ import {
   currentPos,
 } from '../data/timings.js';
 import useFitScale from '../hooks/useFitScale.js';
-import { IsoTile, IsoBuilding, IsoToken, IsoActor, PileStack, IsoLabel } from './IsoPrimitives.jsx';
+import { IsoTile, IsoBuilding, IsoToken, IsoActor, PileStack, IsoLabel, Callout } from './IsoPrimitives.jsx';
 import EquipIcon from './EquipIcon.jsx';
 
 const GROUP_TYPE_COLOR = { bulk: '#60a5fa', discrete: '#c084fc' };
@@ -64,6 +64,8 @@ export default function IsoWarehouse({
   pulse,
   bottleneck,
   failure,
+  callouts,
+  coreCaption,
 }) {
   const [wrapRef, scale] = useFitScale(DESIGN_W, DESIGN_H);
 
@@ -259,18 +261,57 @@ export default function IsoWarehouse({
           />
         )}
         <div className="absolute rounded-full pulse-ring border-2 border-accent-soft/60" style={{ left: wcsCore.x - 42, top: wcsCore.y - 42, width: 84, height: 84, zIndex: 9001 }} />
-        <div
+        {/* the core itself "pops" on every new decision (key = coreCaption.id
+            remounts it) rather than just idly blinking, so its emphasis is
+            tied to real reasoning, matching the caption text below it */}
+        <motion.div
+          key={coreCaption?.id || 'idle'}
           className="absolute rounded-full bg-gradient-to-br from-accent to-blue-700 flex items-center justify-center shadow-glow"
           style={{ left: wcsCore.x - 30, top: wcsCore.y - 30, width: 60, height: 60, zIndex: 9002 }}
+          initial={{ scale: coreCaption ? 1.18 : 1 }}
+          animate={{ scale: 1 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
         >
           <EquipIcon name="brain" className="w-7 h-7 text-white" />
-        </div>
+        </motion.div>
         <div
           className="absolute whitespace-nowrap text-[13px] font-display font-bold text-slate-100 tracking-widest pointer-events-none"
           style={{ left: wcsCore.x, top: wcsCore.y - 58, transform: 'translateX(-50%)', zIndex: 9002 }}
         >
           WCS AI CORE
         </div>
+        <AnimatePresence>
+          {coreCaption && (
+            <motion.div
+              key={coreCaption.id}
+              initial={{ opacity: 0, y: -6, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.92 }}
+              transition={{ duration: 0.3 }}
+              className="absolute whitespace-nowrap rounded-lg border border-accent-soft/60 px-3 py-1.5 text-[11px] font-mono font-semibold text-accent-soft pointer-events-none"
+              style={{
+                left: wcsCore.x,
+                top: wcsCore.y + 40,
+                transform: 'translateX(-50%)',
+                background: 'rgba(6,9,15,.95)',
+                zIndex: 9002,
+                boxShadow: '0 6px 16px -6px rgba(0,0,0,.8), 0 0 14px -4px rgba(147,197,253,.5)',
+              }}
+            >
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-soft mr-1.5 align-middle animate-pulse" />
+              {coreCaption.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* "why" callouts — a floating reason above the storage building
+            whenever stock arrives or gets pulled for a pick, so a viewer
+            never has to guess what criteria routed a unit */}
+        <AnimatePresence>
+          {callouts.map((c) => (
+            <Callout key={c.id} col={c.col} row={c.row} text={c.text} tone={c.tone} elevation={c.elevation} />
+          ))}
+        </AnimatePresence>
 
         {/* inbound vehicles (trucks classified by WCS into robot-arm / AGV / manual) */}
         {vehicles.map((v) => {

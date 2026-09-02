@@ -53,7 +53,8 @@ export default function App() {
           pulse={sim.pulse}
           bottleneck={sim.bottleneck}
           failure={sim.failure}
-          running={sim.running}
+          callouts={sim.callouts}
+          coreCaption={sim.coreCaption}
         />
         <WmsPanel pendingCount={sim.wmsPendingCount} ordersSpawned={sim.wmsOrdersSpawned} groupsFormed={sim.wmsGroupsFormed} />
         <Toasts events={sim.events} />
