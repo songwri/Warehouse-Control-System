@@ -16,7 +16,21 @@ function StatTile({ label, value, unit, accent, sub }) {
 }
 
 export default function Dashboard({ sim }) {
-  const { storageCounts, totalAbsorbed, wmsPendingCount, wmsNextThreshold, wmsGroupsFormed, completedCount, palletCompleted, metrics, running } = sim;
+  // Read from the throttled `dash` snapshot, not the per-frame one, so the
+  // tiles and the chart settle instead of churning on every tick.
+  const {
+    storageCounts,
+    totalAbsorbed,
+    wmsPendingCount,
+    wmsNextThreshold,
+    wmsGroupsFormed,
+    completedCount,
+    palletCompleted,
+    optimizationEvents,
+    leadTimeReduction,
+    history,
+  } = sim.dash;
+  const { running } = sim;
   const inStorage = storageCounts.climber + storageCounts.shuttle + storageCounts.rack;
 
   return (
@@ -49,13 +63,13 @@ export default function Dashboard({ sim }) {
           <span className={`w-2 h-2 rounded-full ${running ? 'bg-ok pulse-ring' : 'bg-slate-600'}`} />
           <span className="font-mono text-sm font-semibold text-ok">{running ? 'ACTIVE' : 'PAUSED'}</span>
         </div>
-        <span className="text-[10px] text-slate-500 font-mono">최적화 개입 {metrics.optimizationEvents}회 · 단축 {metrics.leadTimeReduction}%</span>
+        <span className="text-[10px] text-slate-500 font-mono">최적화 개입 {optimizationEvents}회 · 단축 {leadTimeReduction}%</span>
       </div>
 
       <div className="flex-1 min-w-[160px] px-3 py-2">
         <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">In / Out Trend</span>
         <ResponsiveContainer width="100%" height={62}>
-          <AreaChart data={metrics.history} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
+          <AreaChart data={history} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="inGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={LANE_COLOR.plt} stopOpacity={0.5} />

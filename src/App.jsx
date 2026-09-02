@@ -19,13 +19,13 @@ export default function App() {
           <div>
             <h1 className="font-display text-base font-semibold leading-tight">WCS Simulator</h1>
             <p className="text-[10px] font-mono text-slate-500 leading-tight">
-              Warehouse Control System · 입고 누적 {sim.totalAbsorbed}건
+              Warehouse Control System · 입고 누적 {sim.dash.totalAbsorbed}건
             </p>
           </div>
         </div>
         <div className="text-[10px] font-mono text-slate-500">
-          출고완료 {sim.completedCount} / {TOTAL_ORDERS}
-          {sim.urgentCompleted > 0 && <span className="text-amber-400 ml-1.5">+ 긴급 {sim.urgentCompleted}건</span>}
+          출고완료 {sim.dash.completedCount} / {TOTAL_ORDERS}
+          {sim.dash.urgentCompleted > 0 && <span className="text-amber-400 ml-1.5">+ 긴급 {sim.dash.urgentCompleted}건</span>}
         </div>
       </header>
 
@@ -58,10 +58,18 @@ export default function App() {
         />
         <WmsPanel pendingCount={sim.wmsPendingCount} ordersSpawned={sim.wmsOrdersSpawned} groupsFormed={sim.wmsGroupsFormed} />
         <Toasts events={sim.events} />
-        <DecisionStory story={sim.story} />
+        {/* corner variant anchors inside <main>; the modal variant is fixed
+            and covers the whole viewport regardless of where it mounts */}
+        <DecisionStory story={sim.story} onFinish={sim.finishStory} />
       </main>
 
       <Dashboard sim={sim} />
+
+      {/* Whole-screen red warning frame while a bottleneck or an equipment
+          failure is live — the alarm belongs to the board, not one building. */}
+      {(sim.bottleneck || sim.failure) && (
+        <div className="alert-frame pointer-events-none fixed inset-0 z-[60]" aria-hidden="true" />
+      )}
     </div>
   );
 }

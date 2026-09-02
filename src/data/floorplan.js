@@ -21,11 +21,6 @@ export const LANE_COLOR = {
 // Off-map spawn point trucks drive in from / leave toward.
 export const OFFMAP_COL = -2.4;
 
-// The WCS AI core sits centrally above the whole flow so its decision
-// pings can reach any zone without colliding with equipment labels.
-export const CORE_COL = 15;
-export const CORE_ROW = -2.8;
-
 // ---- Inbound (vehicle dock = WCS's 1st decision: which vehicle method) ----
 export const INBOUND_COL = 1;
 export const INBOUND_DOCKS = [

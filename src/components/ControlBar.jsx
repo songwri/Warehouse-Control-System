@@ -41,7 +41,7 @@ export default function ControlBar({
           )}
         </button>
         <div className="flex rounded-lg overflow-hidden border border-slate-700">
-          {[1, 2, 5].map((s) => (
+          {[1, 2].map((s) => (
             <button
               key={s}
               onClick={() => setSpeed(s)}

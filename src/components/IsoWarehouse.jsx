@@ -1,11 +1,9 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GRID_COLS, GRID_ROWS, DESIGN_W, DESIGN_H, isoPoint } from '../lib/iso.js';
 import {
   ZONES,
   zoneOfCol,
-  CORE_COL,
-  CORE_ROW,
   INBOUND_COL,
   INBOUND_DOCKS,
   STORAGE_BANDS,
@@ -30,18 +28,22 @@ import {
   currentPos,
 } from '../data/timings.js';
 import useFitScale from '../hooks/useFitScale.js';
-import { IsoTile, IsoBuilding, IsoToken, IsoActor, PileStack, IsoLabel, Callout } from './IsoPrimitives.jsx';
+import { IsoFloor, IsoBuilding, IsoToken, IsoActor, PileStack, IsoLabel, Callout } from './IsoPrimitives.jsx';
 import EquipIcon from './EquipIcon.jsx';
 
 const GROUP_TYPE_COLOR = { bulk: '#60a5fa', discrete: '#c084fc' };
 const PALLET_SHIP_COLOR = '#fb923c';
 const VEHICLE_ICON = { robotArm: 'robot-arm', agv: 'forklift', manual: 'forklift' };
 
-function shadeFor(col, row) {
-  const zone = zoneOfCol(col);
-  const checker = (col + row) % 2 === 0;
-  return { zone, opacity: checker ? 0.16 : 0.09 };
-}
+// WCS core sits dead-centre at the top of the board, overlooking every zone.
+const CORE = { x: DESIGN_W / 2, y: 74 };
+const CONE_R = 1020;
+const CONE_HALF = (13 * Math.PI) / 180;
+const CONE_POINTS = [
+  `${CORE.x},${CORE.y}`,
+  `${CORE.x + CONE_R * Math.sin(CONE_HALF)},${CORE.y + CONE_R * Math.cos(CONE_HALF)}`,
+  `${CORE.x - CONE_R * Math.sin(CONE_HALF)},${CORE.y + CONE_R * Math.cos(CONE_HALF)}`,
+].join(' ');
 
 function bandOccupancy(row, storageCounts) {
   for (const [key, band] of Object.entries(STORAGE_BANDS)) {
@@ -73,24 +75,19 @@ export default function IsoWarehouse({
     const list = [];
     for (let c = 0; c < GRID_COLS; c++) {
       for (let r = 0; r < GRID_ROWS; r++) {
-        const { zone, opacity } = shadeFor(c, r);
-        const color = zone.color;
+        const zone = zoneOfCol(c);
+        const checker = (c + r) % 2 === 0;
         const occ = zone.key === 'storage' ? bandOccupancy(r, storageCounts) : null;
-        list.push(
-          <IsoTile
-            key={`${c}-${r}`}
-            col={c}
-            row={r}
-            color={color}
-            opacity={occ ? Math.max(opacity, occ.ratio * 0.55) : opacity}
-          />
-        );
+        // Occupancy is ADDED to the checkerboard base, never replaces it, so
+        // a full storage band darkens the floor without flattening the grid.
+        const fill = (checker ? 0.17 : 0.08) + (occ ? occ.ratio * 0.32 : 0);
+        list.push({ col: c, row: r, color: zone.color, fill });
       }
     }
     return list;
   }, [storageCounts]);
 
-  const wcsCore = isoPoint(CORE_COL, CORE_ROW, 170);
+  const wcsCore = CORE;
 
   return (
     <div ref={wrapRef} className="relative flex-1 min-h-0 rounded-xl border border-slate-700/60 bg-ink-900/70 overflow-hidden">
@@ -105,7 +102,48 @@ export default function IsoWarehouse({
           transformOrigin: 'top center',
         }}
       >
-        {tiles}
+        <IsoFloor tiles={tiles} width={DESIGN_W} height={DESIGN_H} />
+
+        {/* WCS surveillance sweep — a CCTV-style cone from the core plus
+            radar waves, so the core visibly watches the entire floor rather
+            than sitting inert in a corner. Sits above the floor, below the
+            equipment so it never obscures a label. */}
+        <svg
+          className="absolute pointer-events-none"
+          style={{ left: 0, top: 0, width: DESIGN_W, height: DESIGN_H, zIndex: 400 }}
+          width={DESIGN_W}
+          height={DESIGN_H}
+        >
+          <defs>
+            <linearGradient id="scanCone" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.30" />
+              <stop offset="45%" stopColor="#60a5fa" stopOpacity="0.10" />
+              <stop offset="100%" stopColor="#60a5fa" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <motion.g
+            style={{ transformOrigin: `${CORE.x}px ${CORE.y}px` }}
+            animate={{ rotate: [-52, 52] }}
+            transition={{ duration: 7.5, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+          >
+            <polygon points={CONE_POINTS} fill="url(#scanCone)" />
+          </motion.g>
+          {[0, 1, 2].map((i) => (
+            <motion.circle
+              key={i}
+              cx={CORE.x}
+              cy={CORE.y}
+              r={70}
+              fill="none"
+              stroke="#60a5fa"
+              strokeWidth="1.5"
+              style={{ transformOrigin: `${CORE.x}px ${CORE.y}px` }}
+              initial={{ opacity: 0, scale: 0.25 }}
+              animate={{ opacity: [0, 0.35, 0], scale: [0.25, 9] }}
+              transition={{ duration: 5.4, repeat: Infinity, delay: i * 1.8, ease: 'easeOut' }}
+            />
+          ))}
+        </svg>
 
         {/* zone labels */}
         {ZONES.map((z) => (
@@ -260,49 +298,59 @@ export default function IsoWarehouse({
             transition={{ duration: 0.9 }}
           />
         )}
-        <div className="absolute rounded-full pulse-ring border-2 border-accent-soft/60" style={{ left: wcsCore.x - 42, top: wcsCore.y - 42, width: 84, height: 84, zIndex: 9001 }} />
+        {/* rotating scanner ring — the core reads as an always-on radar dish */}
+        <div
+          className="absolute rounded-full core-spin border-2 border-dashed border-accent-soft/35"
+          style={{ left: wcsCore.x - 68, top: wcsCore.y - 68, width: 136, height: 136, zIndex: 9000 }}
+        />
+        <div className="absolute rounded-full pulse-ring border-2 border-accent-soft/60" style={{ left: wcsCore.x - 54, top: wcsCore.y - 54, width: 108, height: 108, zIndex: 9001 }} />
         {/* the core itself "pops" on every new decision (key = coreCaption.id
             remounts it) rather than just idly blinking, so its emphasis is
             tied to real reasoning, matching the caption text below it */}
         <motion.div
           key={coreCaption?.id || 'idle'}
           className="absolute rounded-full bg-gradient-to-br from-accent to-blue-700 flex items-center justify-center shadow-glow"
-          style={{ left: wcsCore.x - 30, top: wcsCore.y - 30, width: 60, height: 60, zIndex: 9002 }}
-          initial={{ scale: coreCaption ? 1.18 : 1 }}
+          style={{ left: wcsCore.x - 38, top: wcsCore.y - 38, width: 76, height: 76, zIndex: 9002 }}
+          initial={{ scale: coreCaption ? 1.16 : 1 }}
           animate={{ scale: 1 }}
           transition={{ duration: 0.45, ease: 'easeOut' }}
         >
-          <EquipIcon name="brain" className="w-7 h-7 text-white" />
+          <EquipIcon name="brain" className="w-9 h-9 text-white" />
         </motion.div>
         <div
-          className="absolute whitespace-nowrap text-[13px] font-display font-bold text-slate-100 tracking-widest pointer-events-none"
-          style={{ left: wcsCore.x, top: wcsCore.y - 58, transform: 'translateX(-50%)', zIndex: 9002 }}
+          className="absolute whitespace-nowrap text-[15px] font-display font-bold text-slate-100 tracking-[0.2em] pointer-events-none"
+          style={{ left: wcsCore.x, top: wcsCore.y - 72, transform: 'translateX(-50%)', zIndex: 9002 }}
         >
           WCS AI CORE
         </div>
-        <AnimatePresence>
-          {coreCaption && (
-            <motion.div
-              key={coreCaption.id}
-              initial={{ opacity: 0, y: -6, scale: 0.92 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 6, scale: 0.92 }}
-              transition={{ duration: 0.3 }}
-              className="absolute whitespace-nowrap rounded-lg border border-accent-soft/60 px-3 py-1.5 text-[11px] font-mono font-semibold text-accent-soft pointer-events-none"
-              style={{
-                left: wcsCore.x,
-                top: wcsCore.y + 40,
-                transform: 'translateX(-50%)',
-                background: 'rgba(6,9,15,.95)',
-                zIndex: 9002,
-                boxShadow: '0 6px 16px -6px rgba(0,0,0,.8), 0 0 14px -4px rgba(147,197,253,.5)',
-              }}
-            >
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-soft mr-1.5 align-middle animate-pulse" />
-              {coreCaption.text}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* anchor div holds the centering transform, motion child holds the
+            animation - see Callout for why they must not share an element */}
+        <div
+          className="absolute pointer-events-none"
+          style={{ left: wcsCore.x, top: wcsCore.y + 52, transform: 'translateX(-50%)', zIndex: 9002 }}
+        >
+          {/* wait mode: an outgoing caption must clear before the next one
+              mounts, otherwise the two stack and shove each other mid-fade */}
+          <AnimatePresence mode="wait">
+            {coreCaption && (
+              <motion.div
+                key={coreCaption.id}
+                initial={{ opacity: 0, y: -6, scale: 0.92 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 6, scale: 0.92 }}
+                transition={{ duration: 0.3 }}
+                className="whitespace-nowrap rounded-lg border border-accent-soft/60 px-3.5 py-2 text-[12px] font-mono font-semibold text-accent-soft"
+                style={{
+                  background: 'rgba(6,9,15,.95)',
+                  boxShadow: '0 6px 16px -6px rgba(0,0,0,.8), 0 0 14px -4px rgba(147,197,253,.5)',
+                }}
+              >
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-soft mr-1.5 align-middle animate-pulse" />
+                {coreCaption.text}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* "why" callouts — a floating reason above the storage building
             whenever stock arrives or gets pulled for a pick, so a viewer
@@ -351,10 +399,31 @@ export default function IsoWarehouse({
           })
         )}
 
-        {/* urgent tokens */}
+        {/* urgent (hot) orders — oversized versus a normal order square and
+            dragging a fading trail, so the hi-pass speed reads instantly */}
         {urgentTokens.map((tk) => {
+          const dur = URGENT_DURATIONS[tk.phase] || 1;
           const { col, row } = currentPos(tk, URGENT_DURATIONS);
-          return <IsoToken key={tk.id} col={col} row={row} color="#f59e0b" glow size={16} elevation={26} />;
+          return (
+            <Fragment key={tk.id}>
+              {[0.42, 0.28, 0.14].map((back, i) => {
+                const p = currentPos({ ...tk, t: tk.t - back * dur }, URGENT_DURATIONS);
+                return (
+                  <IsoToken
+                    key={`${tk.id}-trail${i}`}
+                    col={p.col}
+                    row={p.row}
+                    size={10 + i * 3}
+                    color="#f59e0b"
+                    elevation={26}
+                    z={1900}
+                    opacity={0.16 + i * 0.14}
+                  />
+                );
+              })}
+              <IsoToken col={col} row={row} color="#f59e0b" glow size={20} elevation={26} />
+            </Fragment>
+          );
         })}
       </div>
     </div>
