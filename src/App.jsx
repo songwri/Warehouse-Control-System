@@ -1,9 +1,8 @@
-import useSimulation from './hooks/useSimulation.js';
+import useSimulation, { TOTAL_ORDERS } from './hooks/useSimulation.js';
 import ControlBar from './components/ControlBar.jsx';
-import FlowGrid from './components/FlowGrid.jsx';
+import IsoWarehouse from './components/IsoWarehouse.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Toasts from './components/Toasts.jsx';
-import { TOTAL_ORDERS } from './data/equipment.js';
 
 export default function App() {
   const sim = useSimulation();
@@ -18,12 +17,12 @@ export default function App() {
           <div>
             <h1 className="font-display text-base font-semibold leading-tight">WCS Simulator</h1>
             <p className="text-[10px] font-mono text-slate-500 leading-tight">
-              Warehouse Control System · 임원 데모 · {sim.batchesSpawned * 20 > TOTAL_ORDERS ? TOTAL_ORDERS : sim.batchesSpawned * 20}/{TOTAL_ORDERS} 오더
+              Warehouse Control System · 임원 데모 · 입고 {sim.totalSpawned}/{TOTAL_ORDERS} 오더
             </p>
           </div>
         </div>
         <div className="text-[10px] font-mono text-slate-500">
-          완료 {sim.completedCount} / {TOTAL_ORDERS}
+          출고완료 {sim.completedCount} / {TOTAL_ORDERS}
           {sim.urgentCompleted > 0 && <span className="text-amber-400 ml-1.5">+ 긴급 {sim.urgentCompleted}건</span>}
         </div>
       </header>
@@ -41,11 +40,20 @@ export default function App() {
       />
 
       <main className="relative flex-1 min-h-0 flex flex-col px-4 py-3">
-        <FlowGrid orders={sim.orders} running={sim.running} bottleneck={sim.bottleneck} failure={sim.failure} />
+        <IsoWarehouse
+          inboundItems={sim.inboundItems}
+          batches={sim.batches}
+          urgentTokens={sim.urgentTokens}
+          storageCounts={sim.storageCounts}
+          pulse={sim.pulse}
+          bottleneck={sim.bottleneck}
+          failure={sim.failure}
+          running={sim.running}
+        />
         <Toasts events={sim.events} />
       </main>
 
-      <Dashboard orders={sim.orders} completedCount={sim.completedCount} metrics={sim.metrics} running={sim.running} />
+      <Dashboard sim={sim} />
     </div>
   );
 }

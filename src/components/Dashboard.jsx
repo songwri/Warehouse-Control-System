@@ -1,12 +1,10 @@
-import { useMemo } from 'react';
 import { AreaChart, Area, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
-import { LANES, TOTAL_ORDERS } from '../data/equipment.js';
-
-const CAPACITY = 26;
+import { TOTAL_ORDERS, BATCH_SIZE, TOTAL_BATCHES } from '../hooks/useSimulation.js';
+import { LANE_COLOR } from '../data/floorplan.js';
 
 function StatTile({ label, value, unit, accent, sub }) {
   return (
-    <div className="flex flex-col justify-center px-4 border-r border-slate-800 last:border-r-0 min-w-[128px]">
+    <div className="flex flex-col justify-center px-4 border-r border-slate-800 last:border-r-0 min-w-[126px]">
       <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">{label}</span>
       <span className="font-mono text-xl font-semibold leading-tight" style={{ color: accent }}>
         {value}
@@ -17,46 +15,28 @@ function StatTile({ label, value, unit, accent, sub }) {
   );
 }
 
-export default function Dashboard({ orders, completedCount, metrics, running }) {
-  const movingByLane = useMemo(() => {
-    const counts = { pcs: 0, plt: 0, manual: 0 };
-    for (const o of orders) {
-      if (o.status === 'moving') counts[o.lane] = (counts[o.lane] || 0) + 1;
-    }
-    return counts;
-  }, [orders]);
-
-  const movingTotal = movingByLane.pcs + movingByLane.plt + movingByLane.manual;
-  const utilization = Math.min(100, Math.round((movingTotal / CAPACITY) * 100));
-
-  const chartData = metrics.throughputHistory.map((p) => ({ t: p.t, count: p.count }));
+export default function Dashboard({ sim }) {
+  const { storageCounts, totalAbsorbed, batchesFormed, completedCount, metrics, running } = sim;
+  const inStorage = storageCounts.climber + storageCounts.shuttle + storageCounts.rack;
+  const towardNextBatch = totalAbsorbed - batchesFormed * BATCH_SIZE;
 
   return (
     <div className="flex items-stretch border-t border-slate-800 bg-ink-900/90 h-[104px] flex-shrink-0">
-      <StatTile
-        label="Throughput"
-        value={completedCount}
-        unit={`/ ${TOTAL_ORDERS}건`}
-        accent="#e2e8f0"
-        sub="완료 오더"
-      />
+      <StatTile label="Inbound → Storage" value={totalAbsorbed} unit={`/ ${TOTAL_ORDERS}건`} accent="#e2e8f0" sub={`재고 ${inStorage}건 보관중`} />
 
-      <div className="flex flex-col justify-center px-4 border-r border-slate-800 min-w-[150px]">
-        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Equipment Utilization</span>
+      <div className="flex flex-col justify-center px-4 border-r border-slate-800 min-w-[168px]">
+        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">다음 출고그룹까지</span>
         <div className="flex items-center gap-2 mt-1">
-          <span className="font-mono text-xl font-semibold text-slate-100">{utilization}%</span>
+          <span className="font-mono text-xl font-semibold text-slate-100">{towardNextBatch}</span>
+          <span className="text-xs text-slate-500">/ {BATCH_SIZE}건</span>
           <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${utilization}%` }} />
+            <div className="h-full bg-gradient-to-r from-purple-400 to-amber-400" style={{ width: `${(towardNextBatch / BATCH_SIZE) * 100}%` }} />
           </div>
         </div>
-        <div className="flex gap-2 mt-1">
-          {LANES.map((l) => (
-            <span key={l.key} className="text-[9px] font-mono" style={{ color: l.color }}>
-              {l.key} {movingByLane[l.key]}
-            </span>
-          ))}
-        </div>
+        <span className="text-[10px] text-slate-500 font-mono">출고그룹 {batchesFormed} / {TOTAL_BATCHES} 편성</span>
       </div>
+
+      <StatTile label="출고 완료" value={completedCount} unit={`/ ${TOTAL_ORDERS}건`} accent="#34d399" sub={`배치 ${Math.floor(completedCount / BATCH_SIZE)}건 발송`} />
 
       <div className="flex flex-col justify-center px-4 border-r border-slate-800 min-w-[150px]">
         <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">AI Optimization</span>
@@ -64,34 +44,31 @@ export default function Dashboard({ orders, completedCount, metrics, running }) 
           <span className={`w-2 h-2 rounded-full ${running ? 'bg-ok pulse-ring' : 'bg-slate-600'}`} />
           <span className="font-mono text-sm font-semibold text-ok">{running ? 'ACTIVE' : 'PAUSED'}</span>
         </div>
-        <span className="text-[10px] text-slate-500 font-mono">최적화 개입 {metrics.optimizationEvents}회</span>
+        <span className="text-[10px] text-slate-500 font-mono">최적화 개입 {metrics.optimizationEvents}회 · 단축 {metrics.leadTimeReduction}%</span>
       </div>
 
-      <StatTile
-        label="Lead Time Reduction"
-        value={`${metrics.leadTimeReduction}`}
-        unit="%"
-        accent="#34d399"
-        sub="WCS 개입 누적 효과"
-      />
-
       <div className="flex-1 min-w-[160px] px-3 py-2">
-        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Throughput Trend</span>
+        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">In / Out Trend</span>
         <ResponsiveContainer width="100%" height={62}>
-          <AreaChart data={chartData} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
+          <AreaChart data={metrics.history} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
             <defs>
-              <linearGradient id="tpGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.55} />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+              <linearGradient id="inGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={LANE_COLOR.plt} stopOpacity={0.5} />
+                <stop offset="100%" stopColor={LANE_COLOR.plt} stopOpacity={0.02} />
+              </linearGradient>
+              <linearGradient id="outGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#34d399" stopOpacity={0.5} />
+                <stop offset="100%" stopColor="#34d399" stopOpacity={0.02} />
               </linearGradient>
             </defs>
             <YAxis hide domain={[0, TOTAL_ORDERS]} />
             <Tooltip
               contentStyle={{ background: '#0a0e1a', border: '1px solid #263045', fontSize: 11 }}
               labelFormatter={() => ''}
-              formatter={(v) => [`${v}건`, '완료']}
+              formatter={(v, name) => [`${v}건`, name === 'absorbed' ? '입고→보관' : '출고완료']}
             />
-            <Area type="monotone" dataKey="count" stroke="#60a5fa" strokeWidth={1.75} fill="url(#tpGrad)" isAnimationActive={false} />
+            <Area type="monotone" dataKey="absorbed" stroke={LANE_COLOR.plt} strokeWidth={1.5} fill="url(#inGrad)" isAnimationActive={false} />
+            <Area type="monotone" dataKey="completed" stroke="#34d399" strokeWidth={1.5} fill="url(#outGrad)" isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
