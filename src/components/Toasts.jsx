@@ -7,11 +7,14 @@ const TONE_STYLE = {
   urgent: 'border-amber-500/60 bg-amber-950/90 text-amber-200',
 };
 
+const MAX_VISIBLE = 4; // cap so a fast event burst (5x speed) can't overflow past the dashboard
+
 export default function Toasts({ events }) {
+  const visible = events.slice(-MAX_VISIBLE);
   return (
     <div className="absolute right-4 top-[104px] z-50 flex flex-col gap-2 w-[300px] pointer-events-none">
       <AnimatePresence>
-        {events.map((e) => (
+        {visible.map((e) => (
           <motion.div
             key={e.id}
             initial={{ opacity: 0, x: 40, scale: 0.95 }}
