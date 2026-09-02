@@ -13,6 +13,9 @@ import {
   PICKING_LANES,
   SORT_COL,
   SORT_HUBS,
+  BYPASS_ROW,
+  BYPASS_ROW_MAX,
+  BYPASS_COLOR,
   PACKING_COL,
   PACKING_STATIONS,
   OUTBOUND_COL,
@@ -37,13 +40,6 @@ const VEHICLE_ICON = { robotArm: 'robot-arm', agv: 'forklift', manual: 'forklift
 
 // WCS core sits dead-centre at the top of the board, overlooking every zone.
 const CORE = { x: DESIGN_W / 2, y: 74 };
-const CONE_R = 1020;
-const CONE_HALF = (13 * Math.PI) / 180;
-const CONE_POINTS = [
-  `${CORE.x},${CORE.y}`,
-  `${CORE.x + CONE_R * Math.sin(CONE_HALF)},${CORE.y + CONE_R * Math.cos(CONE_HALF)}`,
-  `${CORE.x - CONE_R * Math.sin(CONE_HALF)},${CORE.y + CONE_R * Math.cos(CONE_HALF)}`,
-].join(' ');
 
 function bandOccupancy(row, storageCounts) {
   for (const [key, band] of Object.entries(STORAGE_BANDS)) {
@@ -80,8 +76,9 @@ export default function IsoWarehouse({
         const occ = zone.key === 'storage' ? bandOccupancy(r, storageCounts) : null;
         // Occupancy is ADDED to the checkerboard base, never replaces it, so
         // a full storage band darkens the floor without flattening the grid.
-        const fill = (checker ? 0.17 : 0.08) + (occ ? occ.ratio * 0.32 : 0);
-        list.push({ col: c, row: r, color: zone.color, fill });
+        const isBypass = zone.key === 'sort' && r <= BYPASS_ROW_MAX;
+        const fill = (checker ? 0.17 : 0.08) + (occ ? occ.ratio * 0.32 : 0) + (isBypass ? 0.06 : 0);
+        list.push({ col: c, row: r, color: isBypass ? BYPASS_COLOR : zone.color, fill });
       }
     }
     return list;
@@ -104,59 +101,34 @@ export default function IsoWarehouse({
       >
         <IsoFloor tiles={tiles} width={DESIGN_W} height={DESIGN_H} />
 
-        {/* WCS surveillance sweep — a CCTV-style cone from the core plus
-            radar waves, so the core visibly watches the entire floor rather
-            than sitting inert in a corner. Sits above the floor, below the
-            equipment so it never obscures a label. */}
-        <svg
-          className="absolute pointer-events-none"
-          style={{ left: 0, top: 0, width: DESIGN_W, height: DESIGN_H, zIndex: 400 }}
-          width={DESIGN_W}
-          height={DESIGN_H}
-        >
-          <defs>
-            <linearGradient id="scanCone" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#60a5fa" stopOpacity="0.30" />
-              <stop offset="45%" stopColor="#60a5fa" stopOpacity="0.10" />
-              <stop offset="100%" stopColor="#60a5fa" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <motion.g
-            style={{ transformOrigin: `${CORE.x}px ${CORE.y}px` }}
-            animate={{ rotate: [-52, 52] }}
-            transition={{ duration: 7.5, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-          >
-            <polygon points={CONE_POINTS} fill="url(#scanCone)" />
-          </motion.g>
-          {[0, 1, 2].map((i) => (
-            <motion.circle
-              key={i}
-              cx={CORE.x}
-              cy={CORE.y}
-              r={70}
-              fill="none"
-              stroke="#60a5fa"
-              strokeWidth="1.5"
-              style={{ transformOrigin: `${CORE.x}px ${CORE.y}px` }}
-              initial={{ opacity: 0, scale: 0.25 }}
-              animate={{ opacity: [0, 0.35, 0], scale: [0.25, 9] }}
-              transition={{ duration: 5.4, repeat: Infinity, delay: i * 1.8, ease: 'easeOut' }}
-            />
-          ))}
-        </svg>
-
         {/* zone labels */}
         {ZONES.map((z) => (
-          <IsoLabel key={z.key} col={(z.colRange[0] + z.colRange[1]) / 2} row={-1.6} elevation={0} dim>
+          <IsoLabel key={z.key} col={(z.colRange[0] + z.colRange[1]) / 2} row={-1.6} elevation={30}>
             {z.label}
           </IsoLabel>
         ))}
+
+        {/* express lane caption — sits inside the green bypass strip */}
+        <div
+          className="absolute whitespace-nowrap rounded-md border px-2.5 py-1 text-[11px] font-mono font-bold tracking-wide pointer-events-none"
+          style={{
+            left: isoPoint(SORT_COL - 2, BYPASS_ROW + 1, 20).x,
+            top: isoPoint(SORT_COL - 2, BYPASS_ROW + 1, 20).y,
+            transform: 'translate(-50%, -50%)',
+            color: BYPASS_COLOR,
+            borderColor: `${BYPASS_COLOR}66`,
+            background: 'rgba(6,14,12,.86)',
+            zIndex: 900,
+          }}
+        >
+          직행 · 분류 미경유
+        </div>
 
         {/* inbound vehicle docks — WCS decision #1: which vehicle method */}
         {INBOUND_DOCKS.map((d) => (
           <IsoBuilding key={d.id} col={1} row={d.row} width={86} elevation={44} borderColor="rgba(34,211,238,.4)">
             <EquipIcon name={VEHICLE_ICON[d.vehicle]} className="w-4 h-4 text-cyan-300" />
-            <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{d.method}</span>
+            <span className="text-[11px] text-slate-50 font-semibold leading-tight">{d.method}</span>
           </IsoBuilding>
         ))}
 
@@ -179,13 +151,13 @@ export default function IsoWarehouse({
             key={key}
             col={STORAGE_COL_RANGE[0] + 1}
             row={(band.rowRange[0] + band.rowRange[1]) / 2}
-            width={112}
+            width={128}
             elevation={40}
             borderColor={`${LANE_COLOR[band.lane]}55`}
           >
             <EquipIcon name={key === 'climber' ? 'climber' : key === 'shuttle' ? 'shuttle' : 'rack'} className="w-4 h-4" style={{ color: LANE_COLOR[band.lane] }} />
-            <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{band.label}</span>
-            <span className="text-[8.5px] font-mono text-slate-400">{storageCounts[key] || 0}건 보관중</span>
+            <span className="text-[11px] text-slate-50 font-semibold leading-tight">{band.label}</span>
+            <span className="text-[10px] font-mono text-slate-300">{storageCounts[key] || 0}건 보관중</span>
           </IsoBuilding>
         ))}
         {Object.entries(STORAGE_BANDS).map(([key, band]) => (
@@ -206,13 +178,13 @@ export default function IsoWarehouse({
             key={key}
             col={PICKING_COL_RANGE[0] + 1}
             row={(lane.rowRange[0] + lane.rowRange[1]) / 2}
-            width={118}
+            width={132}
             elevation={42}
             borderColor="rgba(52,211,153,.4)"
           >
             <EquipIcon name={lane.icon} className="w-4 h-4 text-emerald-300" />
-            <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{lane.label}</span>
-            <span className="text-[8px] text-slate-500 leading-tight">{lane.sub}</span>
+            <span className="text-[11px] text-slate-50 font-semibold leading-tight">{lane.label}</span>
+            <span className="text-[9.5px] text-slate-400 leading-tight">{lane.sub}</span>
           </IsoBuilding>
         ))}
 
@@ -231,8 +203,8 @@ export default function IsoWarehouse({
               active={isBottleneck}
             >
               <EquipIcon name={hub.icon} className="w-5 h-5 text-purple-300" />
-              <span className="text-[10px] text-slate-100 font-semibold leading-tight">{hub.label}</span>
-              {isBottleneck && <span className="text-[8.5px] font-mono text-red-400 blink-fast">BOTTLENECK</span>}
+              <span className="text-[11.5px] text-slate-50 font-bold leading-tight">{hub.label}</span>
+              {isBottleneck && <span className="text-[10px] font-mono font-bold text-red-400 blink-fast">BOTTLENECK</span>}
             </IsoBuilding>
           );
         })}
@@ -241,7 +213,7 @@ export default function IsoWarehouse({
         {Object.entries(PACKING_STATIONS).map(([key, st]) => (
           <IsoBuilding key={key} col={PACKING_COL} row={st.row} width={92} elevation={44} borderColor="rgba(251,146,60,.4)">
             <EquipIcon name={st.icon} className="w-4 h-4 text-orange-300" />
-            <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{st.label}</span>
+            <span className="text-[11px] text-slate-50 font-semibold leading-tight">{st.label}</span>
           </IsoBuilding>
         ))}
 
@@ -253,12 +225,12 @@ export default function IsoWarehouse({
               {isFailed ? (
                 <>
                   <EquipIcon name="error" className="w-4 h-4 text-slate-500 blink-fast" />
-                  <span className="text-[9px] font-mono text-red-400 blink-fast">ERROR</span>
+                  <span className="text-[10.5px] font-mono font-bold text-red-400 blink-fast">ERROR</span>
                 </>
               ) : (
                 <>
                   <EquipIcon name={VEHICLE_ICON[d.vehicle]} className="w-4 h-4 text-amber-300" />
-                  <span className="text-[9.5px] text-slate-200 font-medium leading-tight">{d.method}</span>
+                  <span className="text-[11px] text-slate-50 font-semibold leading-tight">{d.method}</span>
                 </>
               )}
             </IsoBuilding>

@@ -5,6 +5,9 @@ const STEP_INTERVAL_MS = 1100;
 const HOLD_AFTER_MS = 2600;
 const MODAL_STEP_MS = 1500;
 const MODAL_HOLD_MS = 1700;
+// routine decisions (inbound, grouping) run brisker than incident responses
+const BRISK_STEP_MS = 1050;
+const BRISK_HOLD_MS = 1200;
 
 const TONE = {
   info: { accent: '#60a5fa', border: 'rgba(96,165,250,.55)' },
@@ -27,8 +30,9 @@ export default function DecisionStory({ story, onFinish }) {
   useEffect(() => {
     if (!story) return;
     const modal = !!story.modal;
-    const stepMs = modal ? MODAL_STEP_MS : STEP_INTERVAL_MS;
-    const holdMs = modal ? MODAL_HOLD_MS : HOLD_AFTER_MS;
+    const brisk = story.pace === 'brisk';
+    const stepMs = modal ? (brisk ? BRISK_STEP_MS : MODAL_STEP_MS) : STEP_INTERVAL_MS;
+    const holdMs = modal ? (brisk ? BRISK_HOLD_MS : MODAL_HOLD_MS) : HOLD_AFTER_MS;
 
     setRevealed(0);
     setVisible(true);
@@ -46,7 +50,10 @@ export default function DecisionStory({ story, onFinish }) {
 
   if (!story) return null;
   const tone = TONE[story.tone] || TONE.info;
-  const total = story.steps.length * (story.modal ? MODAL_STEP_MS : STEP_INTERVAL_MS) + (story.modal ? MODAL_HOLD_MS : HOLD_AFTER_MS);
+  const briskPace = story.pace === 'brisk';
+  const total =
+    story.steps.length * (story.modal ? (briskPace ? BRISK_STEP_MS : MODAL_STEP_MS) : STEP_INTERVAL_MS) +
+    (story.modal ? (briskPace ? BRISK_HOLD_MS : MODAL_HOLD_MS) : HOLD_AFTER_MS);
 
   if (story.modal) {
     return (

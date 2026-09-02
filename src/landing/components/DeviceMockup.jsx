@@ -1,87 +1,99 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Package, Truck, Bot, Boxes } from 'lucide-react';
-import { ScrewCorners, CARBON_FIBRE_BG, SCANLINES_BG } from './Chrome.jsx';
+import { ScrewCorners, VentSlots, CARBON_FIBRE_BG, SCANLINES_BG } from './Chrome.jsx';
 
-const ROWS = [
-  { icon: Truck, label: 'INBOUND · DOCK 3', value: 'ROUTING', ok: true },
-  { icon: Boxes, label: 'STORAGE · RACK B-12', value: '78% FULL', ok: true },
-  { icon: Bot, label: 'PICKING · AMR-04', value: 'ACTIVE', ok: true },
-  { icon: Package, label: 'OUTBOUND · DOCK 6', value: 'ERROR', ok: false },
-];
+const VIDEO_SRC = `${import.meta.env.BASE_URL}wcs-demo.mp4`;
 
+// The hero's signature object: a rugged landscape control monitor with the
+// actual simulator running on its screen. A placeholder layer sits behind the
+// video so the panel still reads as a real device before the clip is ready -
+// or if the browser refuses the file entirely.
 export default function DeviceMockup() {
+  const [playing, setPlaying] = useState(false);
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.94, rotate: -1 }}
       animate={{ opacity: 1, scale: 1, rotate: 0 }}
       transition={{ duration: 0.7, ease: [0.175, 0.885, 0.32, 1.275], delay: 0.2 }}
-      className="relative mx-auto w-full max-w-[420px]"
+      className="relative mx-auto w-full max-w-[620px]"
     >
-      {/* outer bezel */}
+      {/* chassis */}
       <div
-        className="relative rounded-[var(--radius-xl)] p-4"
+        className="relative rounded-[var(--radius-xl)] p-3.5"
         style={{ background: '#333b44', boxShadow: 'var(--shadow-floating)', ...CARBON_FIBRE_BG, backgroundBlendMode: 'overlay' }}
       >
-        <ScrewCorners inset={12} />
+        <ScrewCorners inset={11} />
 
-        {/* screen */}
+        {/* recessed screen */}
         <div
-          className="relative aspect-[4/5] w-full overflow-hidden rounded-[var(--radius-lg)]"
-          style={{ background: '#0c1015', boxShadow: 'var(--shadow-recessed)' }}
+          className="relative aspect-[16/9] w-full overflow-hidden rounded-[var(--radius-lg)]"
+          style={{ background: '#080b10', boxShadow: 'var(--shadow-recessed)' }}
         >
-          <div className="pointer-events-none absolute inset-0 z-20" style={SCANLINES_BG} aria-hidden="true" />
-          <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-black/40 via-transparent to-black/20" aria-hidden="true" />
+          {/* fallback layer — visible until the clip plays */}
+          <div
+            className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
+            style={{
+              opacity: playing ? 0 : 1,
+              backgroundImage:
+                'radial-gradient(120% 90% at 50% 0%, rgba(96,165,250,.18), transparent 60%),' +
+                'repeating-linear-gradient(0deg, rgba(255,255,255,.045) 0 1px, transparent 1px 34px),' +
+                'repeating-linear-gradient(90deg, rgba(255,255,255,.045) 0 1px, transparent 1px 34px)',
+            }}
+            aria-hidden="true"
+          >
+            <span className="font-mono-ind text-[11px] uppercase tracking-[0.3em] text-white/35">
+              WCS Simulation Feed
+            </span>
+          </div>
 
-          <div className="relative z-10 flex h-full flex-col justify-between p-5">
-            <div>
-              <div className="flex items-center justify-between font-mono-ind text-[10px] uppercase tracking-widest text-emerald-400">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" style={{ boxShadow: 'var(--shadow-glow-ok)' }} />
-                  WCS CORE · LIVE
-                </span>
-                <span className="text-white/40">04.02</span>
-              </div>
-              <div className="mt-6 font-mono-ind text-[11px] leading-relaxed text-white/50">
-                &gt; optimizing 1,204 active units_
-                <br />
-                &gt; lead-time reduced 18%_
-              </div>
-            </div>
+          <video
+            className="absolute inset-0 h-full w-full object-cover transition-opacity duration-700"
+            style={{ opacity: playing ? 1 : 0 }}
+            src={VIDEO_SRC}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            onPlaying={() => setPlaying(true)}
+            aria-label="WCS 시뮬레이터 데모 영상"
+          />
 
-            <div className="flex flex-col gap-2.5">
-              {ROWS.map((r) => (
-                <div
-                  key={r.label}
-                  className="flex items-center justify-between rounded-[var(--radius-sm)] border border-white/10 bg-white/[0.03] px-3 py-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <r.icon className="h-3.5 w-3.5 text-white/60" strokeWidth={1.5} />
-                    <span className="font-mono-ind text-[9.5px] tracking-wide text-white/70">{r.label}</span>
-                  </div>
-                  <span
-                    className={`font-mono-ind text-[9.5px] font-bold tracking-wide ${r.ok ? 'text-emerald-400' : 'text-[var(--accent)]'}`}
-                  >
-                    {r.value}
-                  </span>
-                </div>
-              ))}
-            </div>
+          {/* CRT treatment + vignette, over the footage */}
+          <div className="pointer-events-none absolute inset-0 z-20 opacity-70" style={SCANLINES_BG} aria-hidden="true" />
+          <div
+            className="pointer-events-none absolute inset-0 z-20"
+            style={{ boxShadow: 'inset 0 0 90px rgba(0,0,0,.75)' }}
+            aria-hidden="true"
+          />
+
+          {/* on-screen HUD */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 pt-3">
+            <span className="flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 font-mono-ind text-[10px] uppercase tracking-widest text-emerald-400 backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" style={{ boxShadow: 'var(--shadow-glow-ok)' }} />
+              WCS Core · Live
+            </span>
+            <span className="rounded-full bg-black/55 px-2.5 py-1 font-mono-ind text-[10px] tracking-widest text-white/55 backdrop-blur-sm">
+              04.02
+            </span>
           </div>
         </div>
 
-        {/* side buttons */}
-        <div className="absolute -right-1.5 top-14 flex flex-col gap-3">
-          {[28, 28].map((h, i) => (
-            <span key={i} className="w-[5px] rounded-full bg-[#20252b]" style={{ height: h, boxShadow: 'var(--shadow-sharp)' }} />
-          ))}
-        </div>
-
-        {/* power LED */}
-        <div className="mt-3 flex items-center gap-2 px-1">
-          <span className="h-2 w-2 rounded-full bg-[var(--accent)]" style={{ boxShadow: 'var(--shadow-glow-accent)' }} />
-          <span className="font-mono-ind text-[9px] uppercase tracking-widest text-white/40">PWR</span>
+        {/* chassis footer: vents, power lamp, model plate */}
+        <div className="mt-3 flex items-center justify-between px-1">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2 w-2 rounded-full bg-[var(--accent)]" style={{ boxShadow: 'var(--shadow-glow-accent)' }} />
+            <span className="font-mono-ind text-[9px] uppercase tracking-widest text-white/45">PWR</span>
+          </div>
+          <span className="font-mono-ind text-[9px] uppercase tracking-[0.24em] text-white/30">WCS-CTRL / 04</span>
+          <VentSlots count={5} />
         </div>
       </div>
+
+      {/* monitor stand */}
+      <div className="mx-auto h-5 w-24 rounded-b-md" style={{ background: '#2b323a', boxShadow: 'var(--shadow-sharp)' }} />
+      <div className="mx-auto h-2 w-48 rounded-full" style={{ background: '#333b44', boxShadow: 'var(--shadow-card)' }} />
     </motion.div>
   );
 }

@@ -2,7 +2,7 @@ import useSimulation, { TOTAL_ORDERS } from './hooks/useSimulation.js';
 import ControlBar from './components/ControlBar.jsx';
 import IsoWarehouse from './components/IsoWarehouse.jsx';
 import Dashboard from './components/Dashboard.jsx';
-import Toasts from './components/Toasts.jsx';
+import DecisionLedger from './components/DecisionLedger.jsx';
 import WmsPanel from './components/WmsPanel.jsx';
 import DecisionStory from './components/DecisionStory.jsx';
 
@@ -57,7 +57,7 @@ export default function App() {
           coreCaption={sim.coreCaption}
         />
         <WmsPanel pendingCount={sim.wmsPendingCount} ordersSpawned={sim.wmsOrdersSpawned} groupsFormed={sim.wmsGroupsFormed} />
-        <Toasts events={sim.events} />
+        <DecisionLedger counts={sim.dash.counts} latestEvent={sim.events[sim.events.length - 1]} />
         {/* corner variant anchors inside <main>; the modal variant is fixed
             and covers the whole viewport regardless of where it mounts */}
         <DecisionStory story={sim.story} onFinish={sim.finishStory} />

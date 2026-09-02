@@ -188,8 +188,10 @@ export function IsoLabel({ col, row, elevation = 60, children, dim = false }) {
         left: x,
         top: y,
         transform: 'translate(-50%, 0)',
-        fontSize: 11,
-        color: dim ? 'rgba(226,232,240,.5)' : '#e2e8f0',
+        fontSize: 13,
+        letterSpacing: '0.08em',
+        textShadow: '0 2px 6px rgba(0,0,0,.85)',
+        color: dim ? 'rgba(226,232,240,.6)' : '#f1f5f9',
         zIndex: 5000,
       }}
     >

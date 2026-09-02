@@ -49,6 +49,12 @@ export const PICKING_LANES = {
 
 // ---- Sort (optional — only bulk-picked/총량피킹 groups pass through) ----
 export const SORT_COL = 18;
+// Order-picked (오더피킹) work never touches a sorter, so it runs along a
+// dedicated express strip across the top of the sort zone, tinted with the
+// picking zone's green to read as "no sort — straight to packing".
+export const BYPASS_ROW_MAX = 2;
+export const BYPASS_ROW = 1;
+export const BYPASS_COLOR = '#34d399';
 export const SORT_HUBS = {
   libiao: { row: 3, label: 'Libiao 3D 소터', icon: 'sorter' },
   das: { row: 8, label: 'DAS', sub: 'Digital Assort System', icon: 'das' },

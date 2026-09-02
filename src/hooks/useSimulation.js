@@ -12,6 +12,7 @@ import {
   PICKING_LANES,
   SORT_COL,
   SORT_HUBS,
+  BYPASS_ROW,
   PACKING_COL,
   PACKING_STATIONS,
   OUTBOUND_COL,
@@ -32,7 +33,9 @@ import { VEHICLE_DURATIONS, CARGO_DURATIONS, GROUP_DURATIONS, PALLET_SHIP_DURATI
 const TICK_MS = 100;
 const VEHICLE_SPAWN_INTERVAL_MS = 1900; // sim-time between inbound truck spawn attempts at 1x
 const WMS_ORDER_INTERVAL_MS = 340; // sim-time between orders landing in the WMS queue at 1x
-const GROUP_TOKENS_PER_GROUP = 7; // representative tokens standing in for a real order-group - kept low so each one is trackable
+const GROUP_TOKENS_PER_GROUP = 7; // representative tokens per order-group - kept low so each is trackable
+const AUTO_EVENT_MIN_MS = 55000; // sim-time between self-firing incidents
+const AUTO_EVENT_MAX_MS = 85000;
 const PALLET_SHIP_THRESHOLD = 32; // shuttle units accumulated before a pallet shipment forms
 const PALLET_SHIP_TOKENS = 4;
 const BOTTLENECK_DURATION_MS = 6500;
@@ -50,7 +53,7 @@ let idSeq = 1;
 const nextId = () => idSeq++;
 
 function wmsThreshold() {
-  return randInt(28, 45);
+  return randInt(55, 85);
 }
 
 function freshWorld() {
@@ -80,11 +83,21 @@ function freshWorld() {
     bottleneck: null,
     failure: null,
     story: null,
+    storyQueue: [],
     storyInboundShown: false,
-    storyGroupShown: false,
     callouts: [],
     coreCaption: null,
+    autoEventAt: randInt(AUTO_EVENT_MIN_MS, AUTO_EVENT_MAX_MS),
+    // Running ledger of every routing call WCS makes - shown as live counters
+    // instead of a text feed that scrolls faster than anyone can read.
+    counts: { inbound: 0, storage: 0, order: 0, grouping: 0, picking: 0, sorting: 0, packing: 0, outbound: 0 },
   };
+}
+
+// Cinematics are queued, never played on top of each other; the tick loop
+// drains one at a time and freezes the board while it runs.
+function enqueueStory(w, story, effect = null) {
+  w.storyQueue = [...w.storyQueue, { story, effect }];
 }
 
 // A short-lived floating "why" label anchored over a specific building -
@@ -112,6 +125,9 @@ function pickingLanePos(lane) {
 }
 function sortHubPos(hub) {
   return { col: SORT_COL, row: SORT_HUBS[hub].row };
+}
+function bypassPos() {
+  return { col: SORT_COL, row: BYPASS_ROW };
 }
 function packingPos(method) {
   return { col: PACKING_COL, row: PACKING_STATIONS[method].row };
@@ -142,6 +158,7 @@ function buildDash(w) {
     optimizationEvents: w.optimizationEvents,
     leadTimeReduction: w.leadTimeReduction,
     history: w.history,
+    counts: w.counts,
   };
 }
 
@@ -165,6 +182,7 @@ export default function useSimulation() {
   const dashAtRef = useRef(0);
   const pendingEffectRef = useRef(null);
   const wasRunningRef = useRef(true);
+  const makeEventRef = useRef(null);
   runningRef.current = running;
   speedRef.current = speed;
 
@@ -222,6 +240,20 @@ export default function useSimulation() {
     const iv = setInterval(() => {
       if (!runningRef.current) return;
       const w = worldRef.current;
+
+      // A queued cinematic takes priority over everything: freeze the board,
+      // play it, and let finishStory() apply its effect and resume.
+      if (!w.story && w.storyQueue.length) {
+        const next = w.storyQueue[0];
+        w.storyQueue = w.storyQueue.slice(1);
+        wasRunningRef.current = true; // the tick only runs while playing
+        pendingEffectRef.current = next.effect;
+        w.story = { id: nextId(), modal: true, ...next.story };
+        setRunning(false);
+        commit();
+        return;
+      }
+
       const dt = TICK_MS * speedRef.current;
       w.simClock += dt;
       w.vehicleSpawnTimer += dt;
@@ -270,19 +302,20 @@ export default function useSimulation() {
           );
           flashPulse(bandPos.col, bandPos.row);
           setCoreCaption(w, `판단: ${v.dock.method} 입고 → ${STORAGE_BANDS[bandKey].label} 배정`);
+          w.counts = { ...w.counts, inbound: w.counts.inbound + 1 };
           if (!w.storyInboundShown) {
             w.storyInboundShown = true;
-            w.story = {
-              id: nextId(),
-              title: 'WCS 입고 의사결정',
+            enqueueStory(w, {
+              title: '입고 의사결정 — WCS',
+              tone: 'info',
+              pace: 'brisk',
               steps: [
-                { icon: '🚚', text: `차량 입고 확인 — ${v.dock.method} 도크` },
-                { icon: '📦', text: `입고형태 분석 — ${cargoLabel} 입고 판정` },
-                { icon: '🎯', text: `입고 존 결정 — ${STORAGE_BANDS[bandKey].label} 배정` },
-                { icon: '🤖', text: `${v.dock.method} 입고 지시 하달` },
-                { icon: '🏗', text: `${STORAGE_BANDS[bandKey].label} 보관 지시 하달` },
+                { label: '① 차량 인지', icon: '🚚', text: `${v.dock.method} 도크에 차량 도착 — 하차 방식 확정` },
+                { label: '② 입고형태 분석', icon: '📦', text: `적재 형태 판독 결과 ${cargoLabel} 입고로 판정` },
+                { label: '③ 보관존 결정', icon: '🎯', text: `${STORAGE_BANDS[bandKey].label} 배정 — 회전율·단위·가용 슬롯 대조` },
+                { label: '④ 작업 지시', icon: '🤖', text: `${v.dock.method} 하차 지시 · ${STORAGE_BANDS[bandKey].label} 적재 지시 하달` },
               ],
-            };
+            });
           }
           nextVehicles.push({ ...v, phase: 'analyzing', t: 0, cargoType, bandKey });
         } else if (v.phase === 'analyzing') {
@@ -329,6 +362,7 @@ export default function useSimulation() {
         } else if (u.phase === 'toSlot') {
           w.storageCounts = { ...w.storageCounts, [u.bandKey]: (w.storageCounts[u.bandKey] || 0) + 1 };
           w.totalAbsorbed += 1;
+          w.counts = { ...w.counts, storage: w.counts.storage + 1 };
           const bPos = storageBuildingPos(u.bandKey);
           addCallout(w, bPos.col, bPos.row, `+1 입고 — ${u.vehicleMethod} 지시`, 'ok');
           // dropped - absorbed into storage
@@ -344,6 +378,7 @@ export default function useSimulation() {
         if (w.wmsOrdersSpawned < TOTAL_ORDERS) {
           w.wmsOrdersSpawned += 1;
           w.wmsPendingCount += 1;
+          w.counts = { ...w.counts, order: w.counts.order + 1 };
         }
       }
 
@@ -377,21 +412,41 @@ export default function useSimulation() {
         pushEvent(`WCS 그룹핑 — OG-${groupId} (${pickTypeLabel}, ${groupSize}건)`, 'info');
         flashPulse(PICKING_COL_RANGE[0] + 1, 5.5);
         setCoreCaption(w, `판단: OG-${groupId} ${groupSize}건 → ${pickTypeLabel} 편성`);
+        w.counts = { ...w.counts, grouping: w.counts.grouping + 1 };
 
-        if (!w.storyGroupShown) {
-          w.storyGroupShown = true;
-          const leadLane = tokens[0].lane;
-          const laneInfo = PICKING_LANES[leadLane];
-          const wearsGlasses = leadLane === 'amr' || leadLane === 'dpc';
-          const steps = [
-            { icon: '📋', text: `오더 마감 — ${groupSize}건 접수 완료` },
-            { icon: '🔍', text: `주문 형태 분석 — ${pickTypeLabel} 실시` },
-            { icon: '🦾', text: `${laneInfo.label} 피킹 지시` },
-          ];
-          if (wearsGlasses) steps.push({ icon: '🥽', text: '스마트글라스 착용 요청 — 피킹 정확도 검증' });
-          if (groupType === 'bulk') steps.push({ icon: '🔀', text: '분류(SORT) 경유 지시 — 개별 오더 재구성' });
-          w.story = { id: nextId(), title: 'WCS 오더 그룹핑 의사결정', steps };
-        }
+        // Every grouping is a cinematic: WCS explains why this batch was cut
+        // the way it was, and which equipment it just committed the work to.
+        const tally = tokens.reduce((m, t) => ({ ...m, [t.lane]: (m[t.lane] || 0) + 1 }), {});
+        const laneText = Object.entries(tally)
+          .map(([k, v]) => `${PICKING_LANES[k].label} ${v}`)
+          .join(' · ');
+        const wearsGlasses = !!(tally.amr || tally.dpc);
+        const reason =
+          groupType === 'bulk'
+            ? '오더라인 단순 · 동일 SKU 중복 다수 → 묶음 처리 이득'
+            : '오더라인 복합 · SKU 분산 → 건별 처리가 유리';
+        enqueueStory(w, {
+          title: `오더 그룹핑 의사결정 — OG-${groupId}`,
+          tone: groupType === 'bulk' ? 'info' : 'urgent',
+          pace: 'brisk',
+          steps: [
+            { label: '① 오더 마감', icon: '📋', text: `대기 오더 ${groupSize}건 마감 — OG-${groupId} 편성` },
+            { label: '② 주문 형태 분석', icon: '🔍', text: `${reason} → ${pickTypeLabel} 판정` },
+            {
+              label: '③ 설비 배정',
+              icon: '🦾',
+              text: `${laneText}${wearsGlasses ? ' · 스마트글라스 착용 지시' : ''}`,
+            },
+            {
+              label: '④ 후속 경로',
+              icon: groupType === 'bulk' ? '🔀' : '⚡',
+              text:
+                groupType === 'bulk'
+                  ? '분류(3D 소터 / DAS) 경유 후 포장 — 개별 오더로 재구성'
+                  : '분류 미경유 · 직행 레인으로 포장 단계 연결',
+            },
+          ],
+        });
       }
 
       // -- advance order-group tokens --
@@ -412,19 +467,27 @@ export default function useSimulation() {
             const srcPos = storageBuildingPos(tk.sourceBand);
             addCallout(w, srcPos.col, srcPos.row, `오더 발생 — ${PICKING_LANES[tk.lane].label} 피킹 (-1)`, 'urgent');
             const fromPos = pickingLanePos(tk.lane);
+            w.counts = { ...w.counts, picking: w.counts.picking + 1 };
             if (tk.groupType === 'bulk') {
               // While a sorter bottleneck is live, WCS keeps steering *new*
               // bulk work to DAS too - not just the batch already queued.
               const sortHub = w.bottleneck ? 'das' : pickSortHub();
+              w.counts = { ...w.counts, sorting: w.counts.sorting + 1 };
               nextTokens.push({ ...tk, phase: 'toSort', t: 0, from: fromPos, to: sortHubPos(sortHub), sortHub, rerouted: !!w.bottleneck });
             } else {
-              const packMethod = pickPackMethod();
-              nextTokens.push({ ...tk, phase: 'toPacking', t: 0, from: fromPos, to: packingPos(packMethod), packMethod });
+              // Order-picked work runs the express strip over the sorters so
+              // "no sort needed" is a visible route, not an invisible skip.
+              nextTokens.push({ ...tk, phase: 'toBypass', t: 0, from: fromPos, to: bypassPos() });
             }
+          } else if (tk.phase === 'toBypass') {
+            const packMethod = pickPackMethod();
+            w.counts = { ...w.counts, packing: w.counts.packing + 1 };
+            nextTokens.push({ ...tk, phase: 'toPacking', t: 0, from: bypassPos(), to: packingPos(packMethod), packMethod });
           } else if (tk.phase === 'toSort') {
             nextTokens.push({ ...tk, phase: 'atSort', t: 0 });
           } else if (tk.phase === 'atSort') {
             const packMethod = pickPackMethod();
+            w.counts = { ...w.counts, packing: w.counts.packing + 1 };
             nextTokens.push({ ...tk, phase: 'toPacking', t: 0, from: sortHubPos(tk.sortHub), to: packingPos(packMethod), packMethod });
           } else if (tk.phase === 'toPacking') {
             nextTokens.push({ ...tk, phase: 'atPacking', t: 0 });
@@ -432,6 +495,7 @@ export default function useSimulation() {
             const failedDockId = w.failure?.dockId;
             let dock = pickDock(OUTBOUND_DOCKS);
             if (failedDockId && dock.id === failedDockId) dock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId) || dock;
+            w.counts = { ...w.counts, outbound: w.counts.outbound + 1 };
             nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: packingPos(tk.packMethod), to: outboundPos(dock), dock });
           } else if (tk.phase === 'toOutbound') {
             const failedDockId = w.failure?.dockId;
@@ -551,6 +615,15 @@ export default function useSimulation() {
       }
       w.urgentTokens = nextUrgent;
 
+      // -- incidents fire on their own, the way they do on a real floor --
+      if (w.simClock >= w.autoEventAt && !w.story && !w.storyQueue.length) {
+        w.autoEventAt = w.simClock + randInt(AUTO_EVENT_MIN_MS, AUTO_EVENT_MAX_MS);
+        const options = ['urgent'];
+        if (!w.bottleneck) options.push('bottleneck');
+        if (!w.failure) options.push('failure');
+        makeEventRef.current?.(options[randInt(0, options.length - 1)], { auto: true });
+      }
+
       // -- trigger / callout / core-caption expiry --
       if (w.callouts.length) w.callouts = w.callouts.filter((c) => c.until > w.simClock);
       if (w.coreCaption && w.simClock >= w.coreCaption.until) w.coreCaption = null;
@@ -602,145 +675,152 @@ export default function useSimulation() {
     if (wasRunningRef.current) setRunning(true);
   }, [commit]);
 
+  // One builder per incident kind. Button presses play immediately (unless a
+  // cinematic is already on screen); self-fired incidents always queue.
+  const makeEvent = useCallback(
+    (kind, { auto = false } = {}) => {
+      const w = worldRef.current;
+      let story;
+      let effect;
+
+      if (kind === 'bottleneck') {
+        w.bottleneck = { until: w.simClock + BOTTLENECK_DURATION_MS + MODAL_LOCKOUT_MS };
+        flashPulse(SORT_COL, SORT_HUBS.libiao.row);
+        pushEvent('⚠ BOTTLENECK DETECTED — Libiao 3D 소터 허용량 초과', 'danger');
+        const waiting = w.groups.reduce(
+          (n, g) => n + g.tokens.filter((t) => (t.phase === 'toSort' || t.phase === 'atSort') && t.sortHub === 'libiao').length,
+          0
+        );
+        const backlog = waiting > 0 ? `분류 대기 ${waiting}건 적체` : '유입 대비 처리량 부족 — 적체 임박';
+        story = {
+          title: '병목 감지 — WCS 대응',
+          tone: 'danger',
+          steps: [
+            { label: '① 상황 인지', icon: '🔍', text: `Libiao 3D 소터 처리량 임계치 초과 — ${backlog}` },
+            { label: '② 대안 탐색', icon: '🧠', text: 'DAS 분류 라인 여유 용량 확인 · 경로별 예상 지연 시간 산출' },
+            { label: '③ 최적 결정', icon: '✅', text: '총량피킹 물량을 DAS 라인으로 우회 — 소터 부하 분산 후 정상화' },
+          ],
+        };
+        effect = (world) => {
+          let rerouted = 0;
+          world.groups = world.groups.map((group) => ({
+            ...group,
+            tokens: group.tokens.map((tk) => {
+              if ((tk.phase === 'toSort' || tk.phase === 'atSort') && tk.sortHub === 'libiao') {
+                rerouted += 1;
+                return { ...tk, sortHub: 'das', to: tk.phase === 'toSort' ? sortHubPos('das') : tk.to, rerouted: true };
+              }
+              return tk;
+            }),
+          }));
+          pushEvent(
+            rerouted > 0
+              ? `WCS OPTIMIZED — 대기 오더 ${rerouted}건 DAS 라인으로 우회 완료`
+              : 'WCS OPTIMIZED — 총량피킹 물량 DAS 라인 우회 경로 적용',
+            'ok'
+          );
+          world.optimizationEvents += 1;
+          world.leadTimeReduction = Math.min(42, world.leadTimeReduction + randInt(3, 6));
+        };
+      } else if (kind === 'urgent') {
+        const dock = pickDock(INBOUND_DOCKS);
+        pushEvent('🔶 긴급 오더 수신 — 당일 출고 마감 임박', 'urgent');
+        story = {
+          title: '긴급 오더 투입 — WCS 대응',
+          tone: 'urgent',
+          steps: [
+            { label: '① 상황 인지', icon: '🔍', text: `긴급 오더 수신 — ${dock.method} 도크 도착, 당일 출고 마감 임박` },
+            { label: '② 대안 탐색', icon: '🧠', text: '표준 보관 경유 시 마감 초과 · 하이클라이머 즉시 가용 재고 확인' },
+            { label: '③ 최적 결정', icon: '✅', text: '보관 단계 생략 — 하이클라이머 하이패스로 우선 처리 지시' },
+          ],
+        };
+        effect = (world) => {
+          world.urgentTokens = [
+            ...world.urgentTokens,
+            {
+              id: nextId(),
+              urgent: true,
+              phase: 'toPicking',
+              t: 0,
+              from: { col: INBOUND_COL, row: dock.row },
+              to: pickingLanePos('climber'),
+            },
+          ];
+          world.optimizationEvents += 1;
+          world.leadTimeReduction = Math.min(42, world.leadTimeReduction + 2);
+          pushEvent('하이패스 배정 완료 — 보관 단계 건너뛰고 피킹 직행', 'urgent');
+        };
+      } else {
+        const dock = OUTBOUND_DOCKS[1];
+        w.failure = { dockId: dock.id, until: w.simClock + FAILURE_DURATION_MS + MODAL_LOCKOUT_MS };
+        pushEvent(`✖ ${dock.id} (${dock.method}) ERROR — 설비 정지`, 'danger');
+        const stranded = [
+          ...w.groups.flatMap((g) => g.tokens),
+          ...w.palletShipments.flatMap((sh) => sh.tokens),
+        ].filter((tk) => tk.dock?.id === dock.id && (tk.phase === 'toOutbound' || tk.phase === 'atOutbound')).length;
+        story = {
+          title: '설비 고장 — WCS 대응',
+          tone: 'danger',
+          steps: [
+            {
+              label: '① 상황 인지',
+              icon: '🔍',
+              text:
+                stranded > 0
+                  ? `${dock.id} ${dock.method} 정지 — 출고 대기 ${stranded}건 고립`
+                  : `${dock.id} ${dock.method} 정지 — 해당 도크 배정 물량 전량 처리 불가`,
+            },
+            { label: '② 대안 탐색', icon: '🧠', text: '잔여 출고 도크 2개 부하 비교 · 재할당 경로 및 소요시간 산출' },
+            { label: '③ 최적 결정', icon: '✅', text: '고립 물량을 가용 도크로 재할당 — 출고 중단 없이 라인 유지' },
+          ],
+        };
+        effect = (world) => {
+          let rerouted = 0;
+          const reroute = (tk) => {
+            if (tk.dock?.id === dock.id && (tk.phase === 'toOutbound' || tk.phase === 'atOutbound')) {
+              rerouted += 1;
+              const altDock = OUTBOUND_DOCKS.find((d) => d.id !== dock.id);
+              return { ...tk, dock: altDock, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), rerouted: true };
+            }
+            return tk;
+          };
+          world.groups = world.groups.map((group) => ({ ...group, tokens: group.tokens.map(reroute) }));
+          world.palletShipments = world.palletShipments.map((ship) => ({ ...ship, tokens: ship.tokens.map(reroute) }));
+          pushEvent(
+            rerouted > 0
+              ? `WCS 경로 재탐색 — 출고 대기 물량 ${rerouted}건 재할당`
+              : 'WCS 경로 재탐색 — 잔여 출고 도크로 배정 경로 전환',
+            'ok'
+          );
+          world.optimizationEvents += 1;
+          world.leadTimeReduction = Math.min(42, world.leadTimeReduction + randInt(2, 4));
+        };
+      }
+
+      if (auto || w.story) enqueueStory(w, story, effect);
+      else runDecisionModal(story, effect);
+    },
+    [pushEvent, flashPulse, runDecisionModal]
+  );
+  makeEventRef.current = makeEvent;
+
   const triggerBottleneck = useCallback(() => {
     if (triggerCooldown.bottleneck) return;
     fireCooldown('bottleneck', BOTTLENECK_DURATION_MS + MODAL_LOCKOUT_MS);
-    const w = worldRef.current;
-    w.bottleneck = { until: w.simClock + BOTTLENECK_DURATION_MS + MODAL_LOCKOUT_MS };
-    flashPulse(SORT_COL, SORT_HUBS.libiao.row);
-    pushEvent('⚠ BOTTLENECK DETECTED — Libiao 3D 소터 허용량 초과', 'danger');
-
-    const waiting = w.groups.reduce(
-      (n, g) => n + g.tokens.filter((t) => (t.phase === 'toSort' || t.phase === 'atSort') && t.sortHub === 'libiao').length,
-      0
-    );
-    // Never narrate "0건 적체" - if nothing is queued at the sorter yet, state
-    // the condition rather than a count that undercuts the point.
-    const backlog = waiting > 0 ? `분류 대기 ${waiting}건 적체` : '유입 대비 처리량 부족 — 적체 임박';
-
-    runDecisionModal(
-      {
-        title: '병목 감지 — WCS 대응',
-        tone: 'danger',
-        steps: [
-          { label: '① 상황 인지', icon: '🔍', text: `Libiao 3D 소터 처리량 임계치 초과 — ${backlog}` },
-          { label: '② 대안 탐색', icon: '🧠', text: 'DAS 분류 라인 여유 용량 확인 · 경로별 예상 지연 시간 산출' },
-          { label: '③ 최적 결정', icon: '✅', text: '총량피킹 물량을 DAS 라인으로 우회 — 소터 부하 분산 후 정상화' },
-        ],
-      },
-      (world) => {
-        let rerouted = 0;
-        world.groups = world.groups.map((group) => ({
-          ...group,
-          tokens: group.tokens.map((tk) => {
-            if ((tk.phase === 'toSort' || tk.phase === 'atSort') && tk.sortHub === 'libiao') {
-              rerouted += 1;
-              return { ...tk, sortHub: 'das', to: tk.phase === 'toSort' ? sortHubPos('das') : tk.to, rerouted: true };
-            }
-            return tk;
-          }),
-        }));
-        pushEvent(
-          rerouted > 0
-            ? `WCS OPTIMIZED — 대기 오더 ${rerouted}건 DAS 라인으로 우회 완료`
-            : 'WCS OPTIMIZED — 총량피킹 물량 DAS 라인 우회 경로 적용',
-          'ok'
-        );
-        world.optimizationEvents += 1;
-        world.leadTimeReduction = Math.min(42, world.leadTimeReduction + randInt(3, 6));
-      }
-    );
-  }, [pushEvent, fireCooldown, flashPulse, triggerCooldown, runDecisionModal]);
+    makeEvent('bottleneck');
+  }, [triggerCooldown, fireCooldown, makeEvent]);
 
   const triggerUrgent = useCallback(() => {
     if (triggerCooldown.urgent) return;
     fireCooldown('urgent', MODAL_LOCKOUT_MS + 2000);
-    const w = worldRef.current;
-    const dock = pickDock(INBOUND_DOCKS);
-    pushEvent('🔶 긴급 오더 수신 — 당일 출고 마감 임박', 'urgent');
-
-    runDecisionModal(
-      {
-        title: '긴급 오더 투입 — WCS 대응',
-        tone: 'urgent',
-        steps: [
-          { label: '① 상황 인지', icon: '🔍', text: `긴급 오더 수신 — ${dock.method} 도크 도착, 당일 출고 마감 임박` },
-          { label: '② 대안 탐색', icon: '🧠', text: '표준 보관 경유 시 마감 초과 · 하이클라이머 즉시 가용 재고 확인' },
-          { label: '③ 최적 결정', icon: '✅', text: '보관 단계 생략 — 하이클라이머 하이패스로 우선 처리 지시' },
-        ],
-      },
-      (world) => {
-        world.urgentTokens = [
-          ...world.urgentTokens,
-          {
-            id: nextId(),
-            urgent: true,
-            phase: 'toPicking',
-            t: 0,
-            from: { col: INBOUND_COL, row: dock.row },
-            to: pickingLanePos('climber'),
-          },
-        ];
-        world.optimizationEvents += 1;
-        world.leadTimeReduction = Math.min(42, world.leadTimeReduction + 2);
-        pushEvent('하이패스 배정 완료 — 보관 단계 건너뛰고 피킹 직행', 'urgent');
-      }
-    );
-  }, [pushEvent, fireCooldown, triggerCooldown, runDecisionModal]);
+    makeEvent('urgent');
+  }, [triggerCooldown, fireCooldown, makeEvent]);
 
   const triggerFailure = useCallback(() => {
     if (triggerCooldown.failure) return;
     fireCooldown('failure', FAILURE_DURATION_MS + MODAL_LOCKOUT_MS);
-    const w = worldRef.current;
-    const dock = OUTBOUND_DOCKS[1];
-    w.failure = { dockId: dock.id, until: w.simClock + FAILURE_DURATION_MS + MODAL_LOCKOUT_MS };
-    pushEvent(`✖ ${dock.id} (${dock.method}) ERROR — 설비 정지`, 'danger');
-
-    const stranded = [
-      ...w.groups.flatMap((g) => g.tokens),
-      ...w.palletShipments.flatMap((s) => s.tokens),
-    ].filter((tk) => tk.dock?.id === dock.id && (tk.phase === 'toOutbound' || tk.phase === 'atOutbound')).length;
-
-    runDecisionModal(
-      {
-        title: '설비 고장 — WCS 대응',
-        tone: 'danger',
-        steps: [
-          {
-            label: '① 상황 인지',
-            icon: '🔍',
-            text:
-              stranded > 0
-                ? `${dock.id} ${dock.method} 정지 — 출고 대기 ${stranded}건 고립`
-                : `${dock.id} ${dock.method} 정지 — 해당 도크 배정 물량 전량 처리 불가`,
-          },
-          { label: '② 대안 탐색', icon: '🧠', text: '잔여 출고 도크 2개 부하 비교 · 재할당 경로 및 소요시간 산출' },
-          { label: '③ 최적 결정', icon: '✅', text: '고립 물량을 가용 도크로 재할당 — 출고 중단 없이 라인 유지' },
-        ],
-      },
-      (world) => {
-        let rerouted = 0;
-        const reroute = (tk) => {
-          if (tk.dock?.id === dock.id && (tk.phase === 'toOutbound' || tk.phase === 'atOutbound')) {
-            rerouted += 1;
-            const altDock = OUTBOUND_DOCKS.find((d) => d.id !== dock.id);
-            return { ...tk, dock: altDock, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), rerouted: true };
-          }
-          return tk;
-        };
-        world.groups = world.groups.map((group) => ({ ...group, tokens: group.tokens.map(reroute) }));
-        world.palletShipments = world.palletShipments.map((ship) => ({ ...ship, tokens: ship.tokens.map(reroute) }));
-        pushEvent(
-          rerouted > 0
-            ? `WCS 경로 재탐색 — 출고 대기 물량 ${rerouted}건 재할당`
-            : 'WCS 경로 재탐색 — 잔여 출고 도크로 배정 경로 전환',
-          'ok'
-        );
-        world.optimizationEvents += 1;
-        world.leadTimeReduction = Math.min(42, world.leadTimeReduction + randInt(2, 4));
-      }
-    );
-  }, [pushEvent, fireCooldown, triggerCooldown, runDecisionModal]);
+    makeEvent('failure');
+  }, [triggerCooldown, fireCooldown, makeEvent]);
 
   const reset = useCallback(() => {
     worldRef.current = freshWorld();

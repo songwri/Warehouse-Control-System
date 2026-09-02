@@ -8,7 +8,7 @@ const easeMech = [0.175, 0.885, 0.32, 1.275];
 export default function Hero() {
   return (
     <section id="top" className="relative overflow-hidden px-6 pb-20 pt-16 md:pb-28 md:pt-24">
-      <div className="mx-auto grid max-w-6xl items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[0.92fr_1.08fr]">
         <div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}

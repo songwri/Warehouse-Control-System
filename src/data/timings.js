@@ -18,6 +18,8 @@ export const GROUP_DURATIONS = {
   atPicking: 900,
   toSort: 850,
   atSort: 850,
+  // order-picked work runs the express strip above the sorters instead
+  toBypass: 900,
   toPacking: 900,
   atPacking: 650,
   toOutbound: 1000,
