@@ -67,7 +67,7 @@ export default function Dashboard({ sim }) {
       </div>
 
       <div className="flex-1 min-w-[160px] px-3 py-2">
-        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">In / Out Trend</span>
+        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">In / Out 처리량 (건/s)</span>
         <ResponsiveContainer width="100%" height={62}>
           <AreaChart data={history} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
             <defs>
@@ -80,14 +80,14 @@ export default function Dashboard({ sim }) {
                 <stop offset="100%" stopColor="#34d399" stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <YAxis hide domain={[0, TOTAL_ORDERS]} />
+            <YAxis hide domain={[0, (max) => Math.max(4, max + 1)]} />
             <Tooltip
               contentStyle={{ background: '#0a0e1a', border: '1px solid #263045', fontSize: 11 }}
               labelFormatter={() => ''}
-              formatter={(v, name) => [`${v}건`, name === 'absorbed' ? '입고→보관' : '출고완료']}
+              formatter={(v, name) => [`${v}건/s`, name === 'inRate' ? '입고 처리량' : '출고 처리량']}
             />
-            <Area type="monotone" dataKey="absorbed" stroke={LANE_COLOR.plt} strokeWidth={1.5} fill="url(#inGrad)" isAnimationActive={false} />
-            <Area type="monotone" dataKey="completed" stroke="#34d399" strokeWidth={1.5} fill="url(#outGrad)" isAnimationActive={false} />
+            <Area type="monotone" dataKey="inRate" stroke={LANE_COLOR.plt} strokeWidth={1.6} fill="url(#inGrad)" isAnimationActive={false} />
+            <Area type="monotone" dataKey="outRate" stroke="#34d399" strokeWidth={1.6} fill="url(#outGrad)" isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>

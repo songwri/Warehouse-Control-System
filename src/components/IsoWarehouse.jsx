@@ -108,7 +108,7 @@ export default function IsoWarehouse({
           </IsoLabel>
         ))}
 
-        {/* express lane caption — sits inside the green bypass strip */}
+        {/* express lane caption - sits inside the green bypass strip */}
         <div
           className="absolute whitespace-nowrap rounded-md border px-2.5 py-1 text-[11px] font-mono font-bold tracking-wide pointer-events-none"
           style={{
@@ -124,7 +124,7 @@ export default function IsoWarehouse({
           직행 · 분류 미경유
         </div>
 
-        {/* inbound vehicle docks — WCS decision #1: which vehicle method */}
+        {/* inbound vehicle docks - WCS decision #1: which vehicle method */}
         {INBOUND_DOCKS.map((d) => (
           <IsoBuilding key={d.id} col={1} row={d.row} width={86} elevation={44} borderColor="rgba(34,211,238,.4)">
             <EquipIcon name={VEHICLE_ICON[d.vehicle]} className="w-4 h-4 text-cyan-300" />
@@ -132,7 +132,7 @@ export default function IsoWarehouse({
           </IsoBuilding>
         ))}
 
-        {/* inbound staging pile — boxes/pallets accumulate before moving to storage */}
+        {/* inbound staging pile - boxes/pallets accumulate before moving to storage */}
         {Object.entries(inboundPile || {}).map(([bandKey, count]) => (
           <PileStack
             key={`ipile-${bandKey}`}
@@ -172,7 +172,7 @@ export default function IsoWarehouse({
           />
         ))}
 
-        {/* picking lane markers — moved ahead of sort */}
+        {/* picking lane markers - moved ahead of sort */}
         {Object.entries(PICKING_LANES).map(([key, lane]) => (
           <IsoBuilding
             key={key}
@@ -188,7 +188,7 @@ export default function IsoWarehouse({
           </IsoBuilding>
         ))}
 
-        {/* sort hubs — optional, only bulk (총량피킹) groups pass through */}
+        {/* sort hubs - optional, only bulk (총량피킹) groups pass through */}
         {Object.entries(SORT_HUBS).map(([key, hub]) => {
           const isBottleneck = key === 'libiao' && !!bottleneck;
           return (
@@ -209,7 +209,7 @@ export default function IsoWarehouse({
           );
         })}
 
-        {/* packing stations — auto/manual, 50/50 by order group */}
+        {/* packing stations - auto/manual, 50/50 by order group */}
         {Object.entries(PACKING_STATIONS).map(([key, st]) => (
           <IsoBuilding key={key} col={PACKING_COL} row={st.row} width={92} elevation={44} borderColor="rgba(251,146,60,.4)">
             <EquipIcon name={st.icon} className="w-4 h-4 text-orange-300" />
@@ -217,7 +217,7 @@ export default function IsoWarehouse({
           </IsoBuilding>
         ))}
 
-        {/* outbound docks — pooled 1/3 each */}
+        {/* outbound docks - pooled 1/3 each */}
         {OUTBOUND_DOCKS.map((d) => {
           const isFailed = failure && failure.dockId === d.id;
           return (
@@ -237,7 +237,7 @@ export default function IsoWarehouse({
           );
         })}
 
-        {/* WCS AI core + decision ping — the line only ever fires for a
+        {/* WCS AI core + decision ping - the line only ever fires for a
             real routing decision (never ambient/decorative motion), so
             when it appears it means "WCS just chose something". */}
         <svg className="absolute inset-0 pointer-events-none" style={{ width: DESIGN_W, height: DESIGN_H, zIndex: 9000 }}>
@@ -270,7 +270,7 @@ export default function IsoWarehouse({
             transition={{ duration: 0.9 }}
           />
         )}
-        {/* rotating scanner ring — the core reads as an always-on radar dish */}
+        {/* rotating scanner ring - the core reads as an always-on radar dish */}
         <div
           className="absolute rounded-full core-spin border-2 border-dashed border-accent-soft/35"
           style={{ left: wcsCore.x - 68, top: wcsCore.y - 68, width: 136, height: 136, zIndex: 9000 }}
@@ -324,7 +324,7 @@ export default function IsoWarehouse({
           </AnimatePresence>
         </div>
 
-        {/* "why" callouts — a floating reason above the storage building
+        {/* "why" callouts - a floating reason above the storage building
             whenever stock arrives or gets pulled for a pick, so a viewer
             never has to guess what criteria routed a unit */}
         <AnimatePresence>
@@ -355,7 +355,7 @@ export default function IsoWarehouse({
           );
         })}
 
-        {/* order-group tokens — picking -> optional sort -> packing -> outbound */}
+        {/* order-group tokens - picking -> optional sort -> packing -> outbound */}
         {groups.flatMap((group) =>
           group.tokens.map((tk) => {
             const { col, row } = currentPos(tk, GROUP_DURATIONS);
@@ -363,7 +363,7 @@ export default function IsoWarehouse({
           })
         )}
 
-        {/* shuttle pallet-unit shipments — storage -> packing -> outbound directly */}
+        {/* shuttle pallet-unit shipments - storage -> packing -> outbound directly */}
         {palletShipments.flatMap((ship) =>
           ship.tokens.map((tk) => {
             const { col, row } = currentPos(tk, PALLET_SHIP_DURATIONS);
@@ -371,7 +371,7 @@ export default function IsoWarehouse({
           })
         )}
 
-        {/* urgent (hot) orders — oversized versus a normal order square and
+        {/* urgent (hot) orders - oversized versus a normal order square and
             dragging a fading trail, so the hi-pass speed reads instantly */}
         {urgentTokens.map((tk) => {
           const dur = URGENT_DURATIONS[tk.phase] || 1;

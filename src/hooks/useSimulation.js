@@ -34,8 +34,8 @@ const TICK_MS = 100;
 const VEHICLE_SPAWN_INTERVAL_MS = 1900; // sim-time between inbound truck spawn attempts at 1x
 const WMS_ORDER_INTERVAL_MS = 340; // sim-time between orders landing in the WMS queue at 1x
 const GROUP_TOKENS_PER_GROUP = 7; // representative tokens per order-group - kept low so each is trackable
-const AUTO_EVENT_MIN_MS = 55000; // sim-time between self-firing incidents
-const AUTO_EVENT_MAX_MS = 85000;
+const AUTO_EVENT_MIN_MS = 110000; // sim-time between self-firing incidents
+const AUTO_EVENT_MAX_MS = 165000;
 const PALLET_SHIP_THRESHOLD = 32; // shuttle units accumulated before a pallet shipment forms
 const PALLET_SHIP_TOKENS = 4;
 const BOTTLENECK_DURATION_MS = 6500;
@@ -43,7 +43,7 @@ const FAILURE_DURATION_MS = 7500;
 const CALLOUT_MS = 2400; // how long a "why" callout stays over its building
 const CORE_CAPTION_MS = 2600; // how long the WCS core's current-reasoning caption stays up
 const DASH_THROTTLE_MS = 800; // real-time gate on dashboard numbers so they don't jitter
-const MODAL_LOCKOUT_MS = 7000; // roughly the decision modal's own runtime
+const MODAL_LOCKOUT_MS = 21000; // roughly the decision modal's own runtime
 
 // Picking lanes climber/amr/dpc/dps all draw from a storage band; climber
 // serves its own PCS stock, the other three pull general-rack stock.
@@ -53,7 +53,7 @@ let idSeq = 1;
 const nextId = () => idSeq++;
 
 function wmsThreshold() {
-  return randInt(55, 85);
+  return randInt(120, 170);
 }
 
 function freshWorld() {
@@ -75,7 +75,9 @@ function freshWorld() {
     palletCompleted: 0,
     optimizationEvents: 0,
     leadTimeReduction: 0,
-    history: [{ t: 0, absorbed: 0, completed: 0 }],
+    history: [{ t: 0, inRate: 0, outRate: 0 }],
+    sampleIn: 0,
+    sampleOut: 0,
     simClock: 0,
     vehicleSpawnTimer: VEHICLE_SPAWN_INTERVAL_MS, // spawn one immediately
     wmsTimer: 0,
@@ -297,7 +299,7 @@ export default function useSimulation() {
           const bandPos = storageSourcePos(bandKey);
           const cargoLabel = cargoType === 'pallet' ? '팔레트' : '박스';
           pushEvent(
-            `🚚 ${v.dock.method} 도크 입고 — ${cargoLabel} 판정 · ${STORAGE_BANDS[bandKey].label} 배정`,
+            `🚚 ${v.dock.method} 도크 입고, ${cargoLabel} 판정 · ${STORAGE_BANDS[bandKey].label} 배정`,
             'info'
           );
           flashPulse(bandPos.col, bandPos.row);
@@ -306,14 +308,12 @@ export default function useSimulation() {
           if (!w.storyInboundShown) {
             w.storyInboundShown = true;
             enqueueStory(w, {
-              title: '입고 의사결정 — WCS',
+              title: 'WCS 입고 의사결정',
               tone: 'info',
-              pace: 'brisk',
-              steps: [
-                { label: '① 차량 인지', icon: '🚚', text: `${v.dock.method} 도크에 차량 도착 — 하차 방식 확정` },
-                { label: '② 입고형태 분석', icon: '📦', text: `적재 형태 판독 결과 ${cargoLabel} 입고로 판정` },
-                { label: '③ 보관존 결정', icon: '🎯', text: `${STORAGE_BANDS[bandKey].label} 배정 — 회전율·단위·가용 슬롯 대조` },
-                { label: '④ 작업 지시', icon: '🤖', text: `${v.dock.method} 하차 지시 · ${STORAGE_BANDS[bandKey].label} 적재 지시 하달` },
+              lines: [
+                `${v.dock.method} 도크 차량 도착, 적재 형태 판독 결과 ${cargoLabel} 입고`,
+                `회전율·단위·가용 슬롯 대조, 보관존 후보 3개 비교`,
+                `${STORAGE_BANDS[bandKey].label} 배정, ${v.dock.method} 하차 지시 하달`,
               ],
             });
           }
@@ -363,8 +363,9 @@ export default function useSimulation() {
           w.storageCounts = { ...w.storageCounts, [u.bandKey]: (w.storageCounts[u.bandKey] || 0) + 1 };
           w.totalAbsorbed += 1;
           w.counts = { ...w.counts, storage: w.counts.storage + 1 };
+          w.sampleIn += 1;
           const bPos = storageBuildingPos(u.bandKey);
-          addCallout(w, bPos.col, bPos.row, `+1 입고 — ${u.vehicleMethod} 지시`, 'ok');
+          addCallout(w, bPos.col, bPos.row, `+1 입고 · ${u.vehicleMethod} 지시`, 'ok');
           // dropped - absorbed into storage
         } else {
           nextCargo.push(u);
@@ -409,7 +410,7 @@ export default function useSimulation() {
         });
         w.groups = [...w.groups, { id: groupId, type: groupType, size: groupSize, tokens, doneCount: 0 }];
         const pickTypeLabel = groupType === 'bulk' ? '총량피킹' : '오더피킹';
-        pushEvent(`WCS 그룹핑 — OG-${groupId} (${pickTypeLabel}, ${groupSize}건)`, 'info');
+        pushEvent(`WCS 그룹핑 · OG-${groupId} (${pickTypeLabel}, ${groupSize}건)`, 'info');
         flashPulse(PICKING_COL_RANGE[0] + 1, 5.5);
         setCoreCaption(w, `판단: OG-${groupId} ${groupSize}건 → ${pickTypeLabel} 편성`);
         w.counts = { ...w.counts, grouping: w.counts.grouping + 1 };
@@ -423,28 +424,19 @@ export default function useSimulation() {
         const wearsGlasses = !!(tally.amr || tally.dpc);
         const reason =
           groupType === 'bulk'
-            ? '오더라인 단순 · 동일 SKU 중복 다수 → 묶음 처리 이득'
-            : '오더라인 복합 · SKU 분산 → 건별 처리가 유리';
+            ? '오더라인 단순, 동일 SKU 중복 다수로 묶음 처리 이득'
+            : '오더라인 복합, SKU 분산으로 건별 처리가 유리';
+        const routeText =
+          groupType === 'bulk'
+            ? '분류(3D 소터 / DAS) 경유 후 포장'
+            : '분류 미경유, 직행 레인으로 포장 연결';
         enqueueStory(w, {
-          title: `오더 그룹핑 의사결정 — OG-${groupId}`,
+          title: `WCS 오더 그룹핑 의사결정 · OG-${groupId}`,
           tone: groupType === 'bulk' ? 'info' : 'urgent',
-          pace: 'brisk',
-          steps: [
-            { label: '① 오더 마감', icon: '📋', text: `대기 오더 ${groupSize}건 마감 — OG-${groupId} 편성` },
-            { label: '② 주문 형태 분석', icon: '🔍', text: `${reason} → ${pickTypeLabel} 판정` },
-            {
-              label: '③ 설비 배정',
-              icon: '🦾',
-              text: `${laneText}${wearsGlasses ? ' · 스마트글라스 착용 지시' : ''}`,
-            },
-            {
-              label: '④ 후속 경로',
-              icon: groupType === 'bulk' ? '🔀' : '⚡',
-              text:
-                groupType === 'bulk'
-                  ? '분류(3D 소터 / DAS) 경유 후 포장 — 개별 오더로 재구성'
-                  : '분류 미경유 · 직행 레인으로 포장 단계 연결',
-            },
+          lines: [
+            `대기 오더 ${groupSize}건 마감, OG-${groupId} 편성`,
+            `${reason}, ${pickTypeLabel} 판정`,
+            `${laneText} 배정${wearsGlasses ? ', 스마트글라스 착용 지시' : ''}. ${routeText}`,
           ],
         });
       }
@@ -465,7 +457,7 @@ export default function useSimulation() {
           } else if (tk.phase === 'atPicking') {
             w.storageCounts = { ...w.storageCounts, [tk.sourceBand]: Math.max(0, (w.storageCounts[tk.sourceBand] || 0) - 1) };
             const srcPos = storageBuildingPos(tk.sourceBand);
-            addCallout(w, srcPos.col, srcPos.row, `오더 발생 — ${PICKING_LANES[tk.lane].label} 피킹 (-1)`, 'urgent');
+            addCallout(w, srcPos.col, srcPos.row, `오더 발생 · ${PICKING_LANES[tk.lane].label} 피킹 (-1)`, 'urgent');
             const fromPos = pickingLanePos(tk.lane);
             w.counts = { ...w.counts, picking: w.counts.picking + 1 };
             if (tk.groupType === 'bulk') {
@@ -506,6 +498,7 @@ export default function useSimulation() {
               nextTokens.push({ ...tk, phase: 'atOutbound', t: 0 });
             }
           } else if (tk.phase === 'atOutbound') {
+            w.sampleOut += 1;
             doneDelta += 1;
           } else {
             nextTokens.push(tk);
@@ -515,7 +508,7 @@ export default function useSimulation() {
           const doneCount = group.doneCount + doneDelta;
           if (doneCount >= GROUP_TOKENS_PER_GROUP) {
             w.completedCount = Math.min(TOTAL_ORDERS, w.completedCount + group.size);
-            pushEvent(`OG-${group.id} 출고 완료 — ${group.size}건 발송`, 'ok');
+            pushEvent(`OG-${group.id} 출고 완료, ${group.size}건 발송`, 'ok');
             continue; // drop finished group
           }
           nextGroups.push({ ...group, tokens: nextTokens, doneCount });
@@ -545,11 +538,11 @@ export default function useSimulation() {
           };
         });
         w.palletShipments = [...w.palletShipments, { id: shipId, size: PALLET_SHIP_THRESHOLD, tokens, doneCount: 0 }];
-        pushEvent(`4-Way 셔틀 — 팔레트 출고그룹 편성 (${PALLET_SHIP_THRESHOLD}건, 포장 후 즉시 출고)`, 'info');
+        pushEvent(`4-Way 셔틀 팔레트 출고그룹 편성 (${PALLET_SHIP_THRESHOLD}건, 포장 후 즉시 출고)`, 'info');
         flashPulse(PACKING_COL, 6);
         setCoreCaption(w, `판단: 4-Way 셔틀 팔레트 ${PALLET_SHIP_THRESHOLD}건 → 즉시 출고`);
         const shuttlePos = storageBuildingPos('shuttle');
-        addCallout(w, shuttlePos.col, shuttlePos.row, `오더 발생 — 팔레트 직송 출고 (-${PALLET_SHIP_THRESHOLD})`, 'urgent');
+        addCallout(w, shuttlePos.col, shuttlePos.row, `오더 발생 · 팔레트 직송 출고 (-${PALLET_SHIP_THRESHOLD})`, 'urgent');
       }
 
       const nextShipments = [];
@@ -578,6 +571,7 @@ export default function useSimulation() {
               nextTokens.push({ ...tk, phase: 'atOutbound', t: 0 });
             }
           } else if (tk.phase === 'atOutbound') {
+            w.sampleOut += 1;
             doneDelta += 1;
           } else {
             nextTokens.push(tk);
@@ -587,7 +581,7 @@ export default function useSimulation() {
           const doneCount = ship.doneCount + doneDelta;
           if (doneCount >= PALLET_SHIP_TOKENS) {
             w.palletCompleted += ship.size;
-            pushEvent(`팔레트 출고그룹 #${ship.id} 완료 — ${ship.size}건 발송`, 'ok');
+            pushEvent(`팔레트 출고그룹 #${ship.id} 완료, ${ship.size}건 발송`, 'ok');
             continue;
           }
           nextShipments.push({ ...ship, tokens: nextTokens, doneCount });
@@ -610,7 +604,10 @@ export default function useSimulation() {
           const dock = pickDock(OUTBOUND_DOCKS);
           nextUrgent.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(dock) });
         } else if (tk.phase === 'toOutbound') nextUrgent.push({ ...tk, phase: 'atOutbound', t: 0 });
-        else if (tk.phase === 'atOutbound') w.urgentCompleted += 1;
+        else if (tk.phase === 'atOutbound') {
+          w.urgentCompleted += 1;
+          w.sampleOut += 1;
+        }
         else nextUrgent.push(tk);
       }
       w.urgentTokens = nextUrgent;
@@ -629,14 +626,16 @@ export default function useSimulation() {
       if (w.coreCaption && w.simClock >= w.coreCaption.until) w.coreCaption = null;
       if (w.bottleneck && w.simClock >= w.bottleneck.until) w.bottleneck = null;
       if (w.failure && w.simClock >= w.failure.until) {
-        pushEvent(`${w.failure.dockId} 복구 완료 — 정상 라인으로 전환`, 'ok');
+        pushEvent(`${w.failure.dockId} 복구 완료, 정상 라인으로 전환`, 'ok');
         w.failure = null;
       }
 
       // -- sample history once per sim-second --
       if (w.metricSample >= 1000) {
         w.metricSample = 0;
-        w.history = [...w.history, { t: w.history.length, absorbed: w.totalAbsorbed, completed: w.completedCount }].slice(-40);
+        w.history = [...w.history, { t: w.history.length, inRate: w.sampleIn, outRate: w.sampleOut }].slice(-46);
+        w.sampleIn = 0;
+        w.sampleOut = 0;
       }
 
       commit();
@@ -686,19 +685,19 @@ export default function useSimulation() {
       if (kind === 'bottleneck') {
         w.bottleneck = { until: w.simClock + BOTTLENECK_DURATION_MS + MODAL_LOCKOUT_MS };
         flashPulse(SORT_COL, SORT_HUBS.libiao.row);
-        pushEvent('⚠ BOTTLENECK DETECTED — Libiao 3D 소터 허용량 초과', 'danger');
+        pushEvent('⚠ BOTTLENECK DETECTED · Libiao 3D 소터 허용량 초과', 'danger');
         const waiting = w.groups.reduce(
           (n, g) => n + g.tokens.filter((t) => (t.phase === 'toSort' || t.phase === 'atSort') && t.sortHub === 'libiao').length,
           0
         );
-        const backlog = waiting > 0 ? `분류 대기 ${waiting}건 적체` : '유입 대비 처리량 부족 — 적체 임박';
+        const backlog = waiting > 0 ? `분류 대기 ${waiting}건 적체` : '유입 대비 처리량 부족으로 적체 임박';
         story = {
-          title: '병목 감지 — WCS 대응',
+          title: 'WCS 병목 대응',
           tone: 'danger',
-          steps: [
-            { label: '① 상황 인지', icon: '🔍', text: `Libiao 3D 소터 처리량 임계치 초과 — ${backlog}` },
-            { label: '② 대안 탐색', icon: '🧠', text: 'DAS 분류 라인 여유 용량 확인 · 경로별 예상 지연 시간 산출' },
-            { label: '③ 최적 결정', icon: '✅', text: '총량피킹 물량을 DAS 라인으로 우회 — 소터 부하 분산 후 정상화' },
+          lines: [
+            `Libiao 3D 소터 처리량 임계치 초과, ${backlog}`,
+            'DAS 분류 라인 여유 용량 확인, 경로별 예상 지연 시간 산출',
+            '총량피킹 물량을 DAS 라인으로 우회, 소터 부하 분산',
           ],
         };
         effect = (world) => {
@@ -715,8 +714,8 @@ export default function useSimulation() {
           }));
           pushEvent(
             rerouted > 0
-              ? `WCS OPTIMIZED — 대기 오더 ${rerouted}건 DAS 라인으로 우회 완료`
-              : 'WCS OPTIMIZED — 총량피킹 물량 DAS 라인 우회 경로 적용',
+              ? `WCS OPTIMIZED · 대기 오더 ${rerouted}건 DAS 라인으로 우회 완료`
+              : 'WCS OPTIMIZED · 총량피킹 물량 DAS 라인 우회 경로 적용',
             'ok'
           );
           world.optimizationEvents += 1;
@@ -724,14 +723,14 @@ export default function useSimulation() {
         };
       } else if (kind === 'urgent') {
         const dock = pickDock(INBOUND_DOCKS);
-        pushEvent('🔶 긴급 오더 수신 — 당일 출고 마감 임박', 'urgent');
+        pushEvent('🔶 긴급 오더 수신, 당일 출고 마감 임박', 'urgent');
         story = {
-          title: '긴급 오더 투입 — WCS 대응',
+          title: 'WCS 긴급 오더 대응',
           tone: 'urgent',
-          steps: [
-            { label: '① 상황 인지', icon: '🔍', text: `긴급 오더 수신 — ${dock.method} 도크 도착, 당일 출고 마감 임박` },
-            { label: '② 대안 탐색', icon: '🧠', text: '표준 보관 경유 시 마감 초과 · 하이클라이머 즉시 가용 재고 확인' },
-            { label: '③ 최적 결정', icon: '✅', text: '보관 단계 생략 — 하이클라이머 하이패스로 우선 처리 지시' },
+          lines: [
+            `긴급 오더 수신, ${dock.method} 도크 도착. 당일 출고 마감 임박`,
+            '표준 보관 경유 시 마감 초과, 하이클라이머 즉시 가용 재고 확인',
+            '보관 단계 생략, 하이클라이머 하이패스로 우선 처리 지시',
           ],
         };
         effect = (world) => {
@@ -748,30 +747,25 @@ export default function useSimulation() {
           ];
           world.optimizationEvents += 1;
           world.leadTimeReduction = Math.min(42, world.leadTimeReduction + 2);
-          pushEvent('하이패스 배정 완료 — 보관 단계 건너뛰고 피킹 직행', 'urgent');
+          pushEvent('하이패스 배정 완료, 보관 단계 건너뛰고 피킹 직행', 'urgent');
         };
       } else {
         const dock = OUTBOUND_DOCKS[1];
         w.failure = { dockId: dock.id, until: w.simClock + FAILURE_DURATION_MS + MODAL_LOCKOUT_MS };
-        pushEvent(`✖ ${dock.id} (${dock.method}) ERROR — 설비 정지`, 'danger');
+        pushEvent(`✖ ${dock.id} (${dock.method}) ERROR · 설비 정지`, 'danger');
         const stranded = [
           ...w.groups.flatMap((g) => g.tokens),
           ...w.palletShipments.flatMap((sh) => sh.tokens),
         ].filter((tk) => tk.dock?.id === dock.id && (tk.phase === 'toOutbound' || tk.phase === 'atOutbound')).length;
         story = {
-          title: '설비 고장 — WCS 대응',
+          title: 'WCS 설비 고장 대응',
           tone: 'danger',
-          steps: [
-            {
-              label: '① 상황 인지',
-              icon: '🔍',
-              text:
-                stranded > 0
-                  ? `${dock.id} ${dock.method} 정지 — 출고 대기 ${stranded}건 고립`
-                  : `${dock.id} ${dock.method} 정지 — 해당 도크 배정 물량 전량 처리 불가`,
-            },
-            { label: '② 대안 탐색', icon: '🧠', text: '잔여 출고 도크 2개 부하 비교 · 재할당 경로 및 소요시간 산출' },
-            { label: '③ 최적 결정', icon: '✅', text: '고립 물량을 가용 도크로 재할당 — 출고 중단 없이 라인 유지' },
+          lines: [
+            stranded > 0
+              ? `${dock.id} ${dock.method} 정지, 출고 대기 ${stranded}건 고립`
+              : `${dock.id} ${dock.method} 정지, 해당 도크 배정 물량 처리 불가`,
+            '잔여 출고 도크 2개 부하 비교, 재할당 경로 및 소요시간 산출',
+            '고립 물량을 가용 도크로 재할당, 출고 중단 없이 라인 유지',
           ],
         };
         effect = (world) => {
@@ -788,8 +782,8 @@ export default function useSimulation() {
           world.palletShipments = world.palletShipments.map((ship) => ({ ...ship, tokens: ship.tokens.map(reroute) }));
           pushEvent(
             rerouted > 0
-              ? `WCS 경로 재탐색 — 출고 대기 물량 ${rerouted}건 재할당`
-              : 'WCS 경로 재탐색 — 잔여 출고 도크로 배정 경로 전환',
+              ? `WCS 경로 재탐색 · 출고 대기 물량 ${rerouted}건 재할당`
+              : 'WCS 경로 재탐색 · 잔여 출고 도크로 배정 경로 전환',
             'ok'
           );
           world.optimizationEvents += 1;

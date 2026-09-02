@@ -66,7 +66,7 @@ export default function App() {
       <Dashboard sim={sim} />
 
       {/* Whole-screen red warning frame while a bottleneck or an equipment
-          failure is live — the alarm belongs to the board, not one building. */}
+          failure is live - the alarm belongs to the board, not one building. */}
       {(sim.bottleneck || sim.failure) && (
         <div className="alert-frame pointer-events-none fixed inset-0 z-[60]" aria-hidden="true" />
       )}

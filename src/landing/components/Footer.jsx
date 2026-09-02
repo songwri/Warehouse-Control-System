@@ -25,8 +25,8 @@ export default function Footer() {
             </span>
           </div>
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--text-muted)]">
-            A tactile control-room simulator for warehouse automation planning —
-            model the flow before you pour concrete.
+            A tactile control-room simulator for warehouse automation planning.
+            Model the flow before you pour concrete.
           </p>
         </div>
 

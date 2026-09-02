@@ -1,5 +1,5 @@
 const PATHS = {
-  // Robotic arm (inbound/outbound "로봇암" dock) — articulated arm + gripper,
+  // Robotic arm (inbound/outbound "로봇암" dock) - articulated arm + gripper,
   // deliberately NOT a forklift shape.
   'robot-arm': (
     <>
@@ -12,7 +12,7 @@ const PATHS = {
       <circle cx="18" cy="7.8" r="1.1" />
     </>
   ),
-  // Forklift — shared shape for both 무인지게차(auto) and 일반지게차(manual);
+  // Forklift - shared shape for both 무인지게차(auto) and 일반지게차(manual);
   // callers differentiate the two with color/opacity, not silhouette.
   forklift: (
     <>
@@ -64,7 +64,7 @@ const PATHS = {
       <circle cx="12" cy="12" r="2.2" />
     </>
   ),
-  // DAS (Digital Assort System) — a branching funnel, distinct from the
+  // DAS (Digital Assort System) - a branching funnel, distinct from the
   // Libiao 3D Sorter's radial-spoke shape.
   das: (
     <>
@@ -72,7 +72,7 @@ const PATHS = {
       <path d="M4.5 4l5.5 7.5M19.5 4L14 11.5" />
     </>
   ),
-  // AMR — compact transport robot: low rounded body, not a cart or forklift.
+  // AMR - compact transport robot: low rounded body, not a cart or forklift.
   amr: (
     <>
       <rect x="4" y="9" width="16" height="9" rx="3" />
@@ -82,7 +82,7 @@ const PATHS = {
       <circle cx="12" cy="4" r="1.1" />
     </>
   ),
-  // DPC — hand/pick cart: platform + rising handle, two wheels.
+  // DPC - hand/pick cart: platform + rising handle, two wheels.
   dpc: (
     <>
       <rect x="5" y="11" width="12" height="5" rx="1" />
@@ -92,7 +92,7 @@ const PATHS = {
       <circle cx="15" cy="19.5" r="1.6" />
     </>
   ),
-  // DPS — Digital Picking System: pick-to-light display on a stand.
+  // DPS - Digital Picking System: pick-to-light display on a stand.
   dps: (
     <>
       <rect x="4" y="4" width="16" height="11" rx="1.5" />

@@ -30,7 +30,7 @@ export default function DeviceMockup() {
           className="relative aspect-[16/9] w-full overflow-hidden rounded-[var(--radius-lg)]"
           style={{ background: '#080b10', boxShadow: 'var(--shadow-recessed)' }}
         >
-          {/* fallback layer — visible until the clip plays */}
+          {/* fallback layer - visible until the clip plays */}
           <div
             className="absolute inset-0 flex items-center justify-center transition-opacity duration-700"
             style={{
