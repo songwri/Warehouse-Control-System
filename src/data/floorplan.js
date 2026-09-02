@@ -41,10 +41,10 @@ export const STORAGE_CAP_VISUAL = 260; // tiles' fill reads 100% at this count
 // ---- Picking (moved ahead of sort; 4 lanes) ----
 export const PICKING_COL_RANGE = [12, 14];
 export const PICKING_LANES = {
-  climber: { rowRange: [0, 2], label: '하이클라이머 피킹', sub: 'PCS 재고 사용', icon: 'climber' },
-  amr: { rowRange: [3, 5], label: 'AMR', sub: '일반 팔레트랙 · 스마트글라스', icon: 'amr' },
-  dpc: { rowRange: [6, 8], label: 'DPC 피킹카트', sub: '일반 팔레트랙 · 스마트글라스', icon: 'dpc' },
-  dps: { rowRange: [9, 11], label: 'DPS', sub: 'Digital Picking System', icon: 'dps' },
+  climber: { rowRange: [0, 2], label: '하이클라이머 피킹', sub: 'PCS 재고', icon: 'climber' },
+  amr: { rowRange: [3, 5], label: 'AMR', sub: '일반 팔레트랙', icon: 'amr' },
+  dpc: { rowRange: [6, 8], label: 'DPC 피킹카트', sub: '일반 팔레트랙', icon: 'dpc' },
+  dps: { rowRange: [9, 11], label: 'DPS', sub: 'Digital Picking', icon: 'dps' },
 };
 
 // ---- Sort (optional - only bulk-picked/총량피킹 groups pass through) ----
@@ -57,7 +57,7 @@ export const BYPASS_ROW = 1;
 export const BYPASS_COLOR = '#34d399';
 export const SORT_HUBS = {
   libiao: { row: 3, label: 'Libiao 3D 소터', icon: 'sorter' },
-  das: { row: 8, label: 'DAS', sub: 'Digital Assort System', icon: 'das' },
+  das: { row: 8, label: 'DAS', sub: 'Digital Assort', icon: 'das' },
 };
 
 // ---- Packing (auto vs manual, 50/50 by order group) ----

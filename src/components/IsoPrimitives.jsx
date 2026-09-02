@@ -142,7 +142,7 @@ export function PileStack({ col, row, count, color, cap = 5, elevation = 8 }) {
           }}
         />
       ))}
-      <span className="text-[8px] font-mono font-semibold text-slate-200 mt-1 drop-shadow">{count}</span>
+      <span className="text-[10px] font-mono font-bold text-slate-100 mt-1 drop-shadow">{count}</span>
     </div>
   );
 }
@@ -165,7 +165,7 @@ export function Callout({ col, row, text, tone = 'info', elevation = 78 }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -8, scale: 0.95 }}
         transition={{ duration: 0.25 }}
-        className="whitespace-nowrap rounded-md border px-2 py-1 text-[10.5px] font-mono font-semibold"
+        className="whitespace-nowrap rounded-md border px-2.5 py-1 text-[12px] font-mono font-semibold"
         style={{
           background: 'rgba(6,9,15,.94)',
           borderColor: `${color}80`,
@@ -188,7 +188,7 @@ export function IsoLabel({ col, row, elevation = 60, children, dim = false }) {
         left: x,
         top: y,
         transform: 'translate(-50%, 0)',
-        fontSize: 13,
+        fontSize: 16,
         letterSpacing: '0.08em',
         textShadow: '0 2px 6px rgba(0,0,0,.85)',
         color: dim ? 'rgba(226,232,240,.6)' : '#f1f5f9',

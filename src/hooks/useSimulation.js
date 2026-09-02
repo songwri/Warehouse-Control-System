@@ -107,9 +107,17 @@ function enqueueStory(w, story, effect = null) {
 // flowing past. Callouts already active at the same building stack
 // upward (extra elevation) instead of overlapping illegibly.
 function addCallout(w, col, row, text, tone = 'info') {
-  const stackIndex = w.callouts.filter((c) => c.col === col && Math.round(c.baseRow) === Math.round(row)).length;
+  const sameSpot = w.callouts.filter((c) => c.col === col && Math.round(c.baseRow) === Math.round(row));
+  // A burst of identical arrivals (three trucks assigned the same way in a
+  // row) used to print the same chip three times; refresh the live one
+  // instead so the stack only ever carries distinct reasons.
+  const dupe = sameSpot.find((c) => c.text === text);
+  if (dupe) {
+    w.callouts = w.callouts.map((c) => (c.id === dupe.id ? { ...c, until: w.simClock + CALLOUT_MS } : c));
+    return;
+  }
   // Capped so a burst of arrivals can't run the stack off the top of the board.
-  const elevation = 78 + Math.min(stackIndex, 3) * 26;
+  const elevation = 100 + Math.min(sameSpot.length, 1) * 32;
   w.callouts = [
     ...w.callouts,
     { id: nextId(), col, row, baseRow: row, elevation, text, tone, until: w.simClock + CALLOUT_MS },

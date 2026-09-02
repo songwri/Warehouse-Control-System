@@ -20,6 +20,12 @@ export function isoPoint(col, row, elevation = 0) {
   return { x, y };
 }
 
+// Painter's order for the whole board. Rows are often fractional (a token
+// parked partway down a storage band), and every caller feeds this straight
+// into a CSS z-index - which only accepts integers, so a fractional result
+// is rejected outright and the element silently falls back to `auto`,
+// dropping behind anything with a real z-index. Round here so no call site
+// can hit that.
 export function depthOf(col, row) {
-  return col + row;
+  return Math.round(col + row);
 }
