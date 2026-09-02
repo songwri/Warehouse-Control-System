@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // One cinematic runs ~20s: long enough to actually read all three stages.
@@ -98,6 +98,16 @@ export default function DecisionStory({ story, onFinish }) {
 
   const modal = !!story?.modal;
 
+  // Ends the cinematic early. It still calls onFinish, so the decision the
+  // narration was explaining is applied and the board resumes: closing skips
+  // the explanation, it does not cancel the event being explained.
+  const dismiss = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    setVisible(false);
+    onFinish?.();
+  }, [onFinish]);
+
   // modal: one clock drives staging, typing and the OK stamps
   useEffect(() => {
     if (!story || !modal) return;
@@ -108,14 +118,19 @@ export default function DecisionStory({ story, onFinish }) {
     const iv = setInterval(() => {
       const e = Date.now() - startedAt;
       setElapsed(e);
-      if (e >= TOTAL_MS && !finishedRef.current) {
-        finishedRef.current = true;
-        setVisible(false);
-        onFinish?.();
-      }
+      if (e >= TOTAL_MS) dismiss();
     }, 50);
     return () => clearInterval(iv);
-  }, [story, modal, onFinish]);
+  }, [story, modal, dismiss]);
+
+  // Escape closes it too - a modal that traps you until a timer runs out is
+  // the one thing a viewer will reach for the keyboard over.
+  useEffect(() => {
+    if (!story || !modal) return;
+    const onKey = (e) => { if (e.key === 'Escape') dismiss(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [story, modal, dismiss]);
 
   // corner variant keeps its simple stepped reveal
   useEffect(() => {
@@ -169,16 +184,32 @@ export default function DecisionStory({ story, onFinish }) {
               className="w-[760px] max-w-[94vw] rounded-2xl border px-9 py-8 shadow-2xl"
               style={{ background: '#0a0f1b', borderColor: tone.border, boxShadow: `0 0 70px -14px ${tone.accent}` }}
             >
-              <div className="flex items-center justify-between border-b border-ink-700 pb-4">
-                <div className="flex items-center gap-3">
-                  <span className="h-2.5 w-2.5 rounded-full pulse-ring" style={{ background: tone.accent }} />
-                  <span className="font-display text-xl font-bold tracking-wide" style={{ color: tone.accent }}>
+              <div className="flex items-center justify-between gap-4 border-b border-ink-700 pb-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    className={t < 0 ? 'h-2.5 w-2.5 rounded-full pulse-ring' : 'h-2.5 w-2.5 rounded-full'}
+                    style={{ background: tone.accent }}
+                  />
+                  <span className="truncate font-display text-xl font-bold tracking-wide" style={{ color: tone.accent }}>
                     {story.title}
                   </span>
                 </div>
-                <span className="font-mono text-ui-micro uppercase tracking-[0.18em] text-slate-500">
-                  Simulation Paused
-                </span>
+                <div className="flex flex-shrink-0 items-center gap-3">
+                  <span className="font-mono text-ui-micro uppercase tracking-[0.18em] text-slate-500">
+                    Simulation Paused
+                  </span>
+                  <button
+                    type="button"
+                    onClick={dismiss}
+                    aria-label="설명 닫고 계속하기"
+                    title="닫기 (Esc)"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-ink-700 text-slate-500 transition-colors hover:border-ink-600 hover:bg-ink-800 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="h-4 w-4">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                </div>
               </div>
 
               {/* three stages, left to right */}
@@ -189,19 +220,48 @@ export default function DecisionStory({ story, onFinish }) {
                   return (
                     <div key={stage.key} className="flex flex-1 items-start">
                       <div className="flex w-full flex-col items-center gap-2.5">
+                        {/* Only the stage being worked pulses. `scale` and
+                            `opacity` carry SEPARATE transitions on purpose:
+                            with one shared `repeat: Infinity` transition,
+                            Framer kept opacity animating forever on a stage
+                            that had already finished, because its target
+                            (1) was the same in both states and an unchanged
+                            target is never restarted. The result was a
+                            completed stage that went on blinking behind the
+                            active one. Scoping the repeat to `scale` means a
+                            done stage settles and stays settled. */}
                         <motion.div
-                          animate={
-                            state === 'active'
-                              ? { scale: [1, 1.07, 1], opacity: 1 }
-                              : { scale: 1, opacity: lit ? 1 : 0.32 }
-                          }
-                          transition={state === 'active' ? { duration: 1.4, repeat: Infinity } : { duration: 0.35 }}
+                          animate={{
+                            scale: state === 'active' ? [1, 1.07, 1] : 1,
+                            opacity: lit ? 1 : 0.32,
+                          }}
+                          transition={{
+                            scale: state === 'active'
+                              ? { duration: 1.4, repeat: Infinity }
+                              : { duration: 0.35 },
+                            opacity: { duration: 0.35 },
+                          }}
                           className="flex h-16 w-16 items-center justify-center rounded-2xl border-2"
                           style={{
-                            borderColor: lit ? tone.border : 'rgba(148,163,184,.22)',
-                            background: lit ? `${tone.accent}1f` : 'rgba(148,163,184,.06)',
+                            // three clearly ranked states, brightest last:
+                            // pending is dim and grey, done is settled and
+                            // quiet, active is the strongest and the only one
+                            // that moves or glows
+                            borderColor:
+                              state === 'active'
+                                ? tone.border
+                                : state === 'done'
+                                  ? `${tone.accent}4d`
+                                  : 'rgba(148,163,184,.22)',
+                            background:
+                              state === 'active'
+                                ? `${tone.accent}2e`
+                                : state === 'done'
+                                  ? `${tone.accent}12`
+                                  : 'rgba(148,163,184,.06)',
                             boxShadow: state === 'active' ? `0 0 26px -6px ${tone.accent}` : 'none',
-                            color: lit ? tone.accent : '#64748b',
+                            color: state === 'active' ? tone.accent : state === 'done' ? `${tone.accent}b3` : '#64748b',
+                            transition: 'background 350ms ease, border-color 350ms ease',
                           }}
                         >
                           <StageIcon paths={stage.icon} className="h-7 w-7" />
