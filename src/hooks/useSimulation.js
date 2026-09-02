@@ -76,6 +76,9 @@ function freshWorld() {
     metricSample: 0,
     bottleneck: null,
     failure: null,
+    story: null,
+    storyInboundShown: false,
+    storyGroupShown: false,
   };
 }
 
@@ -116,13 +119,13 @@ export default function useSimulation() {
   const pushEvent = useCallback((text, tone = 'info') => {
     const id = nextId();
     setEvents((ev) => [...ev, { id, text, tone }]);
-    setTimeout(() => setEvents((ev) => ev.filter((e) => e.id !== id)), 4800);
+    setTimeout(() => setEvents((ev) => ev.filter((e) => e.id !== id)), 7000);
   }, []);
 
   const flashPulse = useCallback((col, row, from) => {
     const key = nextId();
     setPulse({ col, row, key, from });
-    setTimeout(() => setPulse((p) => (p && p.key === key ? null : p)), 500);
+    setTimeout(() => setPulse((p) => (p && p.key === key ? null : p)), 900);
   }, []);
 
   const commit = useCallback(() => {
@@ -148,6 +151,7 @@ export default function useSimulation() {
       history: w.history,
       bottleneck: w.bottleneck,
       failure: w.failure,
+      story: w.story,
     });
   }, []);
 
@@ -191,18 +195,32 @@ export default function useSimulation() {
           continue;
         }
         if (v.phase === 'arriving') {
-          pushEvent(`🚚 ${v.dock.method} 도크 — 차량 입고`, 'info');
           const dockPos = { col: INBOUND_COL, row: v.dock.row };
           nextVehicles.push({ ...v, phase: 'arrived', t: 0, from: dockPos, to: dockPos });
         } else if (v.phase === 'arrived') {
           const cargoType = pickCargoType(v.dock);
           const bandKey = assignStorageBand(cargoType);
           const bandPos = storageSourcePos(bandKey);
+          const cargoLabel = cargoType === 'pallet' ? '팔레트' : '박스';
           pushEvent(
-            `입고형태 분석 — ${cargoType === 'pallet' ? '팔레트' : '박스'} 입고 · ${STORAGE_BANDS[bandKey].label} 배정`,
+            `🚚 ${v.dock.method} 도크 입고 — ${cargoLabel} 판정 · ${STORAGE_BANDS[bandKey].label} 배정`,
             'info'
           );
           flashPulse(bandPos.col, bandPos.row);
+          if (!w.storyInboundShown) {
+            w.storyInboundShown = true;
+            w.story = {
+              id: nextId(),
+              title: 'WCS 입고 의사결정',
+              steps: [
+                { icon: '🚚', text: `차량 입고 확인 — ${v.dock.method} 도크` },
+                { icon: '📦', text: `입고형태 분석 — ${cargoLabel} 입고 판정` },
+                { icon: '🎯', text: `입고 존 결정 — ${STORAGE_BANDS[bandKey].label} 배정` },
+                { icon: '🤖', text: `${v.dock.method} 입고 지시 하달` },
+                { icon: '🏗', text: `${STORAGE_BANDS[bandKey].label} 보관 지시 하달` },
+              ],
+            };
+          }
           nextVehicles.push({ ...v, phase: 'analyzing', t: 0, cargoType, bandKey });
         } else if (v.phase === 'analyzing') {
           nextVehicles.push({ ...v, phase: 'unloading', t: 0 });
@@ -286,11 +304,24 @@ export default function useSimulation() {
           };
         });
         w.groups = [...w.groups, { id: groupId, type: groupType, size: groupSize, tokens, doneCount: 0 }];
-        pushEvent(
-          `WCS 그룹핑 — OG-${groupId} (${groupType === 'bulk' ? '총량피킹' : '오더피킹'}, ${groupSize}건)`,
-          'info'
-        );
+        const pickTypeLabel = groupType === 'bulk' ? '총량피킹' : '오더피킹';
+        pushEvent(`WCS 그룹핑 — OG-${groupId} (${pickTypeLabel}, ${groupSize}건)`, 'info');
         flashPulse(PICKING_COL_RANGE[0] + 1, 5.5);
+
+        if (!w.storyGroupShown) {
+          w.storyGroupShown = true;
+          const leadLane = tokens[0].lane;
+          const laneInfo = PICKING_LANES[leadLane];
+          const wearsGlasses = leadLane === 'amr' || leadLane === 'dpc';
+          const steps = [
+            { icon: '📋', text: `오더 마감 — ${groupSize}건 접수 완료` },
+            { icon: '🔍', text: `주문 형태 분석 — ${pickTypeLabel} 실시` },
+            { icon: '🦾', text: `${laneInfo.label} 피킹 지시` },
+          ];
+          if (wearsGlasses) steps.push({ icon: '🥽', text: '스마트글라스 착용 요청 — 피킹 정확도 검증' });
+          if (groupType === 'bulk') steps.push({ icon: '🔀', text: '분류(SORT) 경유 지시 — 개별 오더 재구성' });
+          w.story = { id: nextId(), title: 'WCS 오더 그룹핑 의사결정', steps };
+        }
       }
 
       // -- advance order-group tokens --
@@ -579,6 +610,7 @@ export default function useSimulation() {
     },
     bottleneck: snapshot.bottleneck,
     failure: snapshot.failure,
+    story: snapshot.story,
     pulse,
     triggerCooldown,
     triggerBottleneck,

@@ -4,6 +4,7 @@ import IsoWarehouse from './components/IsoWarehouse.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Toasts from './components/Toasts.jsx';
 import WmsPanel from './components/WmsPanel.jsx';
+import DecisionStory from './components/DecisionStory.jsx';
 
 export default function App() {
   const sim = useSimulation();
@@ -56,6 +57,7 @@ export default function App() {
         />
         <WmsPanel pendingCount={sim.wmsPendingCount} ordersSpawned={sim.wmsOrdersSpawned} groupsFormed={sim.wmsGroupsFormed} />
         <Toasts events={sim.events} />
+        <DecisionStory story={sim.story} />
       </main>
 
       <Dashboard sim={sim} />

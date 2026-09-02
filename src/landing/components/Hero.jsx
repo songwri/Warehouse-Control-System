@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Play, ArrowRight } from 'lucide-react';
+import { Play } from 'lucide-react';
 import PhysicalButton from './PhysicalButton.jsx';
 import DeviceMockup from './DeviceMockup.jsx';
 
@@ -30,9 +30,9 @@ export default function Hero() {
             className="mt-6 text-[2.6rem] font-extrabold leading-[1.05] tracking-tight text-[var(--text)] md:text-6xl"
             style={{ textWrap: 'balance' }}
           >
-            Warehouse control,
+            Warehouse Control
             <br />
-            engineered like <span className="text-[var(--accent)]">hardware.</span>
+            <span className="text-[var(--accent)]">System</span>
           </motion.h1>
 
           <motion.p
@@ -52,13 +52,9 @@ export default function Hero() {
             transition={{ duration: 0.6, delay: 0.24, ease: easeMech }}
             className="mt-9 flex flex-wrap items-center gap-4"
           >
-            <PhysicalButton variant="primary" size="lg">
+            <PhysicalButton variant="primary" size="lg" onClick={() => (window.location.href = 'simulator.html')}>
               <Play className="h-4 w-4" strokeWidth={2.5} />
               Watch Demo
-            </PhysicalButton>
-            <PhysicalButton variant="secondary" size="lg" onClick={() => (window.location.href = 'simulator.html')}>
-              Start
-              <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
             </PhysicalButton>
           </motion.div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GRID_COLS, GRID_ROWS, DESIGN_W, DESIGN_H, isoPoint } from '../lib/iso.js';
 import {
@@ -64,21 +64,8 @@ export default function IsoWarehouse({
   pulse,
   bottleneck,
   failure,
-  running,
 }) {
   const [wrapRef, scale] = useFitScale(DESIGN_W, DESIGN_H);
-  const [ambient, setAmbient] = useState(null);
-
-  useEffect(() => {
-    if (!running) return;
-    const iv = setInterval(() => {
-      const band = Object.values(STORAGE_BANDS)[Math.floor(Math.random() * 3)];
-      const col = STORAGE_COL_RANGE[0] + Math.random() * (STORAGE_COL_RANGE[1] - STORAGE_COL_RANGE[0]);
-      const row = band.rowRange[0] + Math.random() * (band.rowRange[1] - band.rowRange[0]);
-      setAmbient({ col, row, key: Date.now() });
-    }, 1400);
-    return () => clearInterval(iv);
-  }, [running]);
 
   const tiles = useMemo(() => {
     const list = [];
@@ -238,7 +225,9 @@ export default function IsoWarehouse({
           );
         })}
 
-        {/* WCS AI core + ping */}
+        {/* WCS AI core + decision ping — the line only ever fires for a
+            real routing decision (never ambient/decorative motion), so
+            when it appears it means "WCS just chose something". */}
         <svg className="absolute inset-0 pointer-events-none" style={{ width: DESIGN_W, height: DESIGN_H, zIndex: 9000 }}>
           <AnimatePresence>
             {pulse && (
@@ -248,49 +237,40 @@ export default function IsoWarehouse({
                 y1={wcsCore.y}
                 x2={isoPoint(pulse.col, pulse.row).x}
                 y2={isoPoint(pulse.col, pulse.row).y}
-                stroke="#60a5fa"
-                strokeWidth="1.5"
-                strokeDasharray="4 5"
+                stroke="#93c5fd"
+                strokeWidth="2.5"
+                strokeDasharray="3 6"
+                strokeLinecap="round"
                 initial={{ opacity: 0 }}
-                animate={{ opacity: [0, 0.85, 0] }}
-                transition={{ duration: 0.6 }}
+                animate={{ opacity: [0, 1, 1, 0] }}
+                transition={{ duration: 0.9, times: [0, 0.15, 0.75, 1] }}
               />
             )}
           </AnimatePresence>
         </svg>
-        <div className="absolute rounded-full pulse-ring border border-accent-soft/50" style={{ left: wcsCore.x - 26, top: wcsCore.y - 26, width: 52, height: 52, zIndex: 9001 }} />
+        {pulse && (
+          <motion.div
+            key={`target-${pulse.key}`}
+            className="absolute rounded-full border-2 border-accent-soft"
+            style={{ left: isoPoint(pulse.col, pulse.row).x - 14, top: isoPoint(pulse.col, pulse.row).y - 14, width: 28, height: 28, zIndex: 9000 }}
+            initial={{ opacity: 0.9, scale: 0.5 }}
+            animate={{ opacity: 0, scale: 1.6 }}
+            transition={{ duration: 0.9 }}
+          />
+        )}
+        <div className="absolute rounded-full pulse-ring border-2 border-accent-soft/60" style={{ left: wcsCore.x - 42, top: wcsCore.y - 42, width: 84, height: 84, zIndex: 9001 }} />
         <div
           className="absolute rounded-full bg-gradient-to-br from-accent to-blue-700 flex items-center justify-center shadow-glow"
-          style={{ left: wcsCore.x - 18, top: wcsCore.y - 18, width: 36, height: 36, zIndex: 9002 }}
+          style={{ left: wcsCore.x - 30, top: wcsCore.y - 30, width: 60, height: 60, zIndex: 9002 }}
         >
-          <EquipIcon name="brain" className="w-4 h-4 text-white" />
+          <EquipIcon name="brain" className="w-7 h-7 text-white" />
         </div>
         <div
-          className="absolute whitespace-nowrap text-[10px] font-mono font-semibold text-slate-400 tracking-widest pointer-events-none"
-          style={{ left: wcsCore.x, top: wcsCore.y - 38, transform: 'translateX(-50%)', zIndex: 9002 }}
+          className="absolute whitespace-nowrap text-[13px] font-display font-bold text-slate-100 tracking-widest pointer-events-none"
+          style={{ left: wcsCore.x, top: wcsCore.y - 58, transform: 'translateX(-50%)', zIndex: 9002 }}
         >
           WCS AI CORE
         </div>
-
-        {/* ambient storage rebalancing flicker */}
-        <AnimatePresence>
-          {ambient && (
-            <motion.div
-              key={ambient.key}
-              className="absolute rounded-full border border-blue-300/70"
-              style={{
-                left: isoPoint(ambient.col, ambient.row).x - 10,
-                top: isoPoint(ambient.col, ambient.row).y - 4,
-                width: 20,
-                height: 20,
-                zIndex: 6000,
-              }}
-              initial={{ opacity: 0.8, scale: 0.4 }}
-              animate={{ opacity: 0, scale: 1.8 }}
-              transition={{ duration: 1 }}
-            />
-          )}
-        </AnimatePresence>
 
         {/* inbound vehicles (trucks classified by WCS into robot-arm / AGV / manual) */}
         {vehicles.map((v) => {

@@ -37,10 +37,7 @@ export default function Nav() {
 
         <div className="hidden items-center gap-3 md:flex">
           <VentSlots count={3} />
-          <PhysicalButton variant="secondary" size="sm" onClick={() => (window.location.href = 'simulator.html')}>
-            Start
-          </PhysicalButton>
-          <PhysicalButton variant="primary" size="sm">
+          <PhysicalButton variant="primary" size="sm" onClick={() => (window.location.href = 'simulator.html')}>
             <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
             Watch Demo
           </PhysicalButton>
@@ -70,10 +67,7 @@ export default function Nav() {
             ))}
           </nav>
           <div className="mt-4 flex gap-3">
-            <PhysicalButton variant="secondary" size="sm" className="flex-1">
-              Start
-            </PhysicalButton>
-            <PhysicalButton variant="primary" size="sm" className="flex-1">
+            <PhysicalButton variant="primary" size="sm" className="flex-1" onClick={() => (window.location.href = 'simulator.html')}>
               <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
               Watch Demo
             </PhysicalButton>
