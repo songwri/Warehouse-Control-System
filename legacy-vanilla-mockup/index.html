@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WCS 자동화 목업 시뮬레이터</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23101722'/%3E%3Ccircle cx='50' cy='50' r='30' fill='none' stroke='%234fa3ff' stroke-width='8'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top-nav">
+    <div class="logo-wrap">
+      <span class="logo-box" aria-hidden="true"></span>
+      <span class="logo-text">WCS Simulator</span>
+      <span class="brand-sub">LIVE</span>
+    </div>
+    <div class="top-nav-right">
+      <span class="env-badge"><span class="brand-dot"></span>물류센터 A동 · 자동화 목업</span>
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="side-nav">
+      <button class="nav-item active" data-page="simulator" title="시뮬레이터">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span>시뮬레이터</span>
+      </button>
+      <button class="nav-item" data-page="equipment" title="설비 기준">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>설비 기준</span>
+      </button>
+    </nav>
+
+    <main class="main-content">
+      <section id="page-simulator" class="page active">
+        <div class="kpi-strip">
+          <div class="kpi-tile">
+            <span class="kpi-label">입고 처리량</span>
+            <span class="kpi-value" id="kpi-inbound">0</span>
+            <span class="kpi-unit">건/시</span>
+            <svg class="kpi-spark" viewBox="0 0 84 24" preserveAspectRatio="none"><polyline id="spark-inbound" class="spark-line spark-in"></polyline></svg>
+          </div>
+          <div class="kpi-tile">
+            <span class="kpi-label">출고 처리량</span>
+            <span class="kpi-value" id="kpi-outbound">0</span>
+            <span class="kpi-unit">건/시</span>
+            <svg class="kpi-spark" viewBox="0 0 84 24" preserveAspectRatio="none"><polyline id="spark-outbound" class="spark-line spark-out"></polyline></svg>
+          </div>
+          <div class="kpi-tile">
+            <span class="kpi-label">설비 가동률</span>
+            <span class="kpi-value" id="kpi-util">--</span>
+          </div>
+          <div class="kpi-tile">
+            <span class="kpi-label">오토검수 정확도</span>
+            <span class="kpi-value" id="kpi-accuracy">--</span>
+          </div>
+        </div>
+
+        <div class="control-bar">
+          <button id="btn-play" class="ctrl-btn primary">⏸ 일시정지</button>
+          <div class="speed-group">
+            <span class="ctrl-label">배속</span>
+            <button class="ctrl-btn speed-btn active" data-speed="1">1x</button>
+            <button class="ctrl-btn speed-btn" data-speed="2">2x</button>
+            <button class="ctrl-btn speed-btn" data-speed="4">4x</button>
+          </div>
+          <div class="manual-group">
+            <button id="btn-manual-inbound" class="ctrl-btn">+ 입고 트럭 발생</button>
+            <button id="btn-manual-order" class="ctrl-btn">+ 이커머스 오더 발생</button>
+          </div>
+          <div class="hint">설비에 마우스를 올리면 설명, 엔티티를 탭하면 상세 정보가 표시돼요</div>
+        </div>
+
+        <div class="app-body">
+          <div id="map-wrap" class="map-wrap">
+            <svg id="wcs-map" xmlns="http://www.w3.org/2000/svg"></svg>
+            <div id="tooltip" class="tooltip"></div>
+            <div id="equip-tooltip" class="equip-tooltip"></div>
+
+            <div class="legend">
+              <div class="legend-item"><span class="swatch swatch-plt"></span>팔레트 (4-Way Shuttle/랙)</div>
+              <div class="legend-item"><span class="swatch swatch-pcs"></span>PCS (HAIPICK Climber)</div>
+              <div class="legend-item"><span class="swatch swatch-glass"></span>스마트글라스 배정 (오토검수)</div>
+            </div>
+          </div>
+
+          <aside class="log-panel">
+            <h2>시스템 이벤트 로그</h2>
+            <div id="event-log" class="event-log"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="page-equipment" class="page">
+        <div class="equip-page-inner">
+          <h1 class="page-title">설비 기준 &amp; 배정 로직</h1>
+          <p class="page-subtitle">입고·보관·출고 각 단계에서 시스템이 설비를 자동배정하는 기준입니다.</p>
+
+          <div id="rules-summary" class="rules-summary"></div>
+
+          <h2 class="section-title">설비 상세</h2>
+          <div id="equip-grid" class="equip-grid"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/svgMap.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
