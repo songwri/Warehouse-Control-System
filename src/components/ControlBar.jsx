@@ -1,5 +1,3 @@
-import { TOTAL_ORDERS } from '../hooks/useSimulation.js';
-
 // One command bar. The app previously carried a brand header and a separate
 // control strip stacked on top of each other, which spent ~100px of vertical
 // room on two weak edges and split "what is this" from "how do I drive it".
@@ -38,8 +36,6 @@ export default function ControlBar({
   onFailure,
   onReset,
   cooldown,
-  completed,
-  urgentCompleted,
 }) {
   return (
     <header className="flex flex-shrink-0 items-center gap-4 border-b border-ink-700 bg-ink-900 px-4 py-2.5">
@@ -91,29 +87,6 @@ export default function ControlBar({
         >
           RESET
         </button>
-      </div>
-
-      {/* Run progress, as the one figure that belongs up here: how far
-          through the 1,000-order scenario this run is. The absolute totals
-          live in the dashboard strip and are not repeated. */}
-      <span className="h-8 w-px bg-ink-700" />
-      <div className="flex items-center gap-2.5">
-        <span className="font-mono text-ui-micro uppercase tracking-[0.12em] text-slate-500">진행률</span>
-        <div className="h-1.5 w-28 overflow-hidden rounded-full bg-ink-800">
-          <div
-            className="h-full rounded-full bg-ok transition-[width] duration-500"
-            style={{ width: `${Math.min(100, (completed / TOTAL_ORDERS) * 100)}%` }}
-          />
-        </div>
-        <span className="font-mono text-ui-meta tabular-nums text-slate-400">
-          {completed.toLocaleString()}
-          <span className="text-slate-600"> / {TOTAL_ORDERS.toLocaleString()}</span>
-        </span>
-        {urgentCompleted > 0 && (
-          <span className="rounded border border-warn/40 px-1.5 py-0.5 font-mono text-ui-micro text-warn">
-            긴급 {urgentCompleted}
-          </span>
-        )}
       </div>
 
       <div className="ml-auto flex items-center gap-2.5">

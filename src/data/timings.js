@@ -22,13 +22,15 @@ export const GROUP_DURATIONS = {
   atPacking: 650,
   toOutbound: 1000,
   atOutbound: 650,
+  // rolls off the right edge of the map once loaded
+  departing: 900,
 };
 
 // A pallet shipment: already unit-of-issue, so it skips picking and sort and
 // goes straight from storage to packing to outbound.
-export const PALLET_SHIP_DURATIONS = { toPacking: 700, atPacking: 400, toOutbound: 800, atOutbound: 400 };
+export const PALLET_SHIP_DURATIONS = { toPacking: 700, atPacking: 400, toOutbound: 800, atOutbound: 400, departing: 900 };
 
-export const URGENT_DURATIONS = { toPicking: 700, atPicking: 350, toOutbound: 700, atOutbound: 350 };
+export const URGENT_DURATIONS = { toPicking: 700, atPicking: 350, toOutbound: 700, atOutbound: 350, departing: 900 };
 
 // ---- Equipment throughput, as a multiplier on how long a token dwells ----
 // Below 1 is faster than baseline. This is the difference an executive is
@@ -93,6 +95,19 @@ export function currentPos(actor, durations) {
   if (total < 0.0001) return { col: to.col, row: to.row };
 
   const travelled = p * total;
+
+  // Which leg runs first matters at the outbound docks. Column-first means a
+  // token bound for the middle dock arrives at the BOTTOM dock's tile and
+  // then slides up the dock face, which looks like it called at the manual
+  // dock on the way. Row-first lines the token up with its dock while it is
+  // still upstream, so the final leg drops straight into the dock from above.
+  if (actor.legOrder === 'row') {
+    if (travelled <= legR) {
+      return { col: from.col, row: from.row + Math.sign(dr) * travelled };
+    }
+    return { col: from.col + Math.sign(dc) * (travelled - legR), row: to.row };
+  }
+
   if (travelled <= legC) {
     return { col: from.col + Math.sign(dc) * travelled, row: from.row };
   }

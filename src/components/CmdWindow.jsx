@@ -39,7 +39,7 @@ export default function CmdWindow({ title, lines, elapsed, typed = false }) {
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ duration: 0.28 }}
-      className="w-[700px] max-w-[94vw] overflow-hidden rounded-xl border border-[#1f3a2a] shadow-2xl"
+      className="w-full max-w-[700px] overflow-hidden rounded-xl border border-[#1f3a2a] shadow-2xl"
       style={{ background: '#04070a', boxShadow: '0 0 60px -12px rgba(52,211,153,.35)' }}
     >
       <div className="flex items-center gap-2 border-b border-[#16281e] bg-[#080d11] px-4 py-2.5">
@@ -49,7 +49,7 @@ export default function CmdWindow({ title, lines, elapsed, typed = false }) {
         <span className="ml-2 font-mono text-ui-meta tracking-wide text-slate-500">{title}</span>
       </div>
 
-      <div className="min-h-[260px] px-5 py-4 font-mono text-ui-card leading-[1.85]">
+      <div className="min-h-[200px] px-5 py-3 font-mono text-ui-body leading-[1.8]">
         {lines.slice(0, shown).map((l, i) => {
           const isLast = i === shown - 1;
           const text = isLast && typed ? l.text.slice(0, partial) : l.text;

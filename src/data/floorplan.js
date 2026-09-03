@@ -7,7 +7,11 @@
 // sorted into individual orders afterward, while a discrete order-pick is
 // already order-level and skips sort entirely.
 
-export const TOTAL_ORDERS = 2000;
+// The day is two scripted books: the previous day's 2,000 and the afternoon's
+// 5,000. This was still 2,000 after the second wave was added, which silently
+// capped the completed counter and made the closing message report a third of
+// the work as the whole day.
+export const TOTAL_ORDERS = 7000;
 export const BATCH_SIZE = 100;
 export const TOTAL_BATCHES = TOTAL_ORDERS / BATCH_SIZE;
 
@@ -19,6 +23,10 @@ export const LANE_COLOR = {
 
 // Off-map spawn point trucks drive in from / leave toward.
 export const OFFMAP_COL = -2.4;
+// Where a loaded order leaves the map. Completed work used to simply stop
+// existing on the dock tile; now it drives off the right edge, so "shipped"
+// is something the room watches happen rather than infers from a counter.
+export const OFFMAP_OUT_COL = 32.5;
 
 // ---- Inbound (vehicle dock = WCS's 1st decision: which vehicle method) ----
 export const INBOUND_COL = 1;

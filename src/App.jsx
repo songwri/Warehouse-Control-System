@@ -30,8 +30,6 @@ export default function App() {
         onFailure={sim.triggerFailure}
         onReset={sim.reset}
         cooldown={sim.triggerCooldown}
-        completed={sim.dash.completedCount}
-        urgentCompleted={sim.dash.urgentCompleted}
       />
 
       {/* The board is the whole stage now. Everything that used to sit in a
@@ -70,11 +68,14 @@ export default function App() {
         <div className="alert-frame pointer-events-none fixed inset-0 z-[60]" aria-hidden="true" />
       )}
 
+      {/* One cover does both ends of the run: it lifts on arrival, and comes
+          back down when WCS closes the day, so the demo ends on black rather
+          than on a board that has quietly stopped moving. */}
       <motion.div
         className="pointer-events-none fixed inset-0 z-[200] bg-ink-950"
         initial={{ opacity: 1 }}
-        animate={{ opacity: entered ? 0 : 1 }}
-        transition={{ duration: 0.85, ease: 'easeOut' }}
+        animate={{ opacity: sim.finished ? 1 : entered ? 0 : 1 }}
+        transition={{ duration: sim.finished ? 2.2 : 0.85, ease: 'easeOut' }}
         aria-hidden="true"
       />
     </div>

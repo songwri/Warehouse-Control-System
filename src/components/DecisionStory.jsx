@@ -12,6 +12,15 @@ const STAGE_MS = TYPE_MS + OK_MS + DWELL_MS;
 const OUTRO_MS = 2500;
 const TOTAL_MS = INTRO_MS + 3 * STAGE_MS + OUTRO_MS;
 
+// A decision that carries raw data opens the analysis terminal at the end of
+// 상황 인지 and returns to the reasoning for 대안 탐색. Situation noticed ->
+// pull the data -> weigh the options -> decide reads in that order; showing
+// the terminal as a separate beat BEFORE the stages put the data first and
+// the noticing second, which is backwards.
+function terminalWindow(story) {
+  return story?.terminal ? cmdDuration(story.terminal.lines, story.terminal.typed) : 0;
+}
+
 const CORNER_STEP_MS = 1100;
 const CORNER_HOLD_MS = 2600;
 
@@ -24,7 +33,7 @@ function runtimeOf(story) {
   if (!story) return TOTAL_MS;
   if (story.kind === 'banner') return BANNER_MS;
   if (story.kind === 'terminal') return cmdDuration(story.lines, story.typed);
-  return TOTAL_MS;
+  return TOTAL_MS + terminalWindow(story);
 }
 
 // The three stages every WCS decision passes through, laid out left to right.
@@ -212,7 +221,21 @@ export default function DecisionStory({ story, onFinish }) {
 
   if (modal) {
     const lines = story.lines || [];
-    const t = elapsed - INTRO_MS;
+    const termMs = terminalWindow(story);
+    const raw = elapsed - INTRO_MS;
+    // the terminal sits between stage 0 and stage 1; while it is open the
+    // stage clock is held, so DETECT stays "done" and EVALUATE stays "pending"
+    const inTerminal = termMs > 0 && raw >= STAGE_MS && raw < STAGE_MS + termMs;
+    const termElapsed = inTerminal ? raw - STAGE_MS : 0;
+    // While the terminal is open the stage clock is pinned just short of the
+    // first boundary: 상황 인지 reads done, 대안 탐색 has not started. Letting
+    // it land exactly on the boundary lit EVALUATE behind the terminal, so
+    // the card claimed to be weighing options while showing raw input.
+    const t = inTerminal
+      ? STAGE_MS - 1
+      : raw < STAGE_MS
+        ? raw
+        : raw - Math.min(termMs, Math.max(0, raw - STAGE_MS));
     const activeStage = Math.max(0, Math.min(2, Math.floor(t / STAGE_MS)));
     const inStage = t - activeStage * STAGE_MS;
 
@@ -362,7 +385,18 @@ export default function DecisionStory({ story, onFinish }) {
                 })}
               </div>
 
-              {/* the reasoning, typed out one line at a time */}
+              {/* the analysis terminal, opened by 상황 인지 and closed before
+                  대안 탐색 - the same panel, so the card never jumps size */}
+              {inTerminal ? (
+                <div className="mt-7 min-h-[128px]">
+                  <CmdWindow
+                    title={story.terminal.title}
+                    lines={story.terminal.lines}
+                    elapsed={termElapsed}
+                    typed={story.terminal.typed}
+                  />
+                </div>
+              ) : (
               <div className="mt-7 min-h-[128px] rounded-xl border border-ink-700 bg-ink-950/70 px-5 py-4">
                 <ol className="flex flex-col gap-3">
                   {lines.map((line, i) => {
@@ -389,6 +423,7 @@ export default function DecisionStory({ story, onFinish }) {
                   })}
                 </ol>
               </div>
+              )}
 
               {/* What DECIDE actually decided. The stage row says WCS reached a
                   conclusion; without the candidates beside it, the room never

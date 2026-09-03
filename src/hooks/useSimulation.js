@@ -19,6 +19,7 @@ import {
   PACKING_STATIONS,
   OUTBOUND_COL,
   OUTBOUND_DOCKS,
+  OFFMAP_OUT_COL,
   pickCargoType,
   assignStorageBand,
   pickDock,
@@ -101,6 +102,10 @@ function freshWorld() {
     // on the first truck and cut in front of the script's own next beat.
     storyInboundShown: true,
     storyGroupingShown: false,
+    firstInboundDone: false,
+    wavesStarted: 0,
+    closing: false,
+    finished: false,
     callouts: [],
     coreCaption: null,
     autoEventAt: randInt(AUTO_EVENT_MIN_MS, AUTO_EVENT_MAX_MS),
@@ -155,12 +160,12 @@ function advanceDemo(w, dt, enqueue) {
     });
     w.demoStep = 'inboundTerminal';
   } else if (step === 'inboundTerminal') {
-    enqueue(w, { kind: 'terminal', title: '입고 오더 분석', lines: inboundTerminalLines() });
     w.demoStep = 'inboundAssign';
   } else if (step === 'inboundAssign') {
     enqueue(w, {
       title: 'WCS 입고 방식 배정',
       tone: 'info',
+      terminal: { title: '입고 오더 분석', lines: inboundTerminalLines() },
       options: INBOUND_CANDIDATES,
       lines: [
         '입고 차량 도착, 적재 형태 판독 결과 팔레트 24 · 박스 312 혼적',
@@ -203,6 +208,7 @@ function startWave(w, enqueue, plan, opening) {
       world.wmsPendingCount = plan.total;
       world.counts = { ...world.counts, order: world.counts.order + plan.total };
       world.groupReleaseTimer = GROUP_RELEASE_MS;
+      world.wavesStarted += 1;
     },
   );
 }
@@ -356,6 +362,7 @@ export default function useSimulation() {
       bottleneck: w.bottleneck,
       failure: w.failure,
       story: w.story,
+    finished: w.finished,
       callouts: w.callouts,
       coreCaption: w.coreCaption,
     });
@@ -406,7 +413,16 @@ export default function useSimulation() {
         const busyDockIds = new Set(w.vehicles.map((v) => v.dock.id));
         const freeDocks = INBOUND_DOCKS.filter((d) => !busyDockIds.has(d.id));
         if (freeDocks.length) {
-          const dock = freeDocks[randInt(0, freeDocks.length - 1)];
+          // The scripted opening has just announced that WCS assigned this
+          // load to the robot arm, so the truck that rolls in next has to be
+          // the robot arm's. Picking at random here let the very first
+          // vehicle drive to the manual dock, contradicting the decision the
+          // room had watched WCS make ten seconds earlier.
+          const scripted = !w.firstInboundDone
+            ? freeDocks.find((d) => d.vehicle === 'robotArm')
+            : null;
+          if (scripted) w.firstInboundDone = true;
+          const dock = scripted || freeDocks[randInt(0, freeDocks.length - 1)];
           w.vehicles.push({
             id: nextId(),
             dock,
@@ -602,7 +618,7 @@ export default function useSimulation() {
 
       // -- advance order-group tokens --
       const nextGroups = [];
-      for (const group of w.groups) {
+      for (let group of w.groups) {
         let doneDelta = 0;
         const nextTokens = [];
         for (const tk of group.tokens) {
@@ -661,33 +677,40 @@ export default function useSimulation() {
             let dock = pickDock(OUTBOUND_DOCKS);
             if (failedDockId && dock.id === failedDockId) dock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId) || dock;
             w.counts = { ...w.counts, outbound: w.counts.outbound + 1 };
-            nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: packingPos(tk.packMethod), to: outboundPos(dock), dock, speed: 1 });
+            nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: packingPos(tk.packMethod), to: outboundPos(dock), dock, speed: 1, legOrder: 'row' });
           } else if (tk.phase === 'toOutbound') {
             const failedDockId = w.failure?.dockId;
             if (failedDockId && tk.dock?.id === failedDockId) {
               const altDock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId);
-              nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), dock: altDock, rerouted: true });
+              nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), dock: altDock, rerouted: true, legOrder: 'row' });
             } else {
               nextTokens.push({ ...tk, phase: 'atOutbound', t: 0 });
             }
           } else if (tk.phase === 'atOutbound') {
             w.sampleOut += 1;
             doneDelta += 1;
-          } else {
+            nextTokens.push({
+              ...tk,
+              phase: 'departing',
+              t: 0,
+              from: outboundPos(tk.dock),
+              to: { col: OFFMAP_OUT_COL, row: tk.dock.row },
+              speed: 1,
+            });
+          } else if (tk.phase !== 'departing') {
             nextTokens.push(tk);
           }
         }
-        if (doneDelta > 0) {
-          const doneCount = group.doneCount + doneDelta;
-          if (doneCount >= GROUP_TOKENS_PER_GROUP) {
-            w.completedCount = Math.min(TOTAL_ORDERS, w.completedCount + group.size);
-            pushEvent(`OG-${group.id} 출고 완료, ${group.size}건 발송`, 'ok');
-            continue; // drop finished group
-          }
-          nextGroups.push({ ...group, tokens: nextTokens, doneCount });
-        } else {
-          nextGroups.push({ ...group, tokens: nextTokens });
+        const doneCount = group.doneCount + doneDelta;
+        if (doneDelta > 0 && doneCount >= GROUP_TOKENS_PER_GROUP && !group.counted) {
+          w.completedCount = Math.min(TOTAL_ORDERS, w.completedCount + group.size);
+          pushEvent(`OG-${group.id} 출고 완료, ${group.size}건 발송`, 'ok');
+          group = { ...group, counted: true };
         }
+        // The group is counted the moment its last token reaches the dock,
+        // but it is not dropped until every token has driven off the map -
+        // otherwise the departure leg would be deleted before it plays.
+        if (nextTokens.length) nextGroups.push({ ...group, tokens: nextTokens, doneCount });
       }
       w.groups = nextGroups;
 
@@ -720,7 +743,7 @@ export default function useSimulation() {
       }
 
       const nextShipments = [];
-      for (const ship of w.palletShipments) {
+      for (let ship of w.palletShipments) {
         let doneDelta = 0;
         const nextTokens = [];
         for (const tk of ship.tokens) {
@@ -735,33 +758,37 @@ export default function useSimulation() {
             const failedDockId = w.failure?.dockId;
             let dock = pickDock(OUTBOUND_DOCKS);
             if (failedDockId && dock.id === failedDockId) dock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId) || dock;
-            nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: packingPos(tk.packMethod), to: outboundPos(dock), dock, speed: 1 });
+            nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: packingPos(tk.packMethod), to: outboundPos(dock), dock, speed: 1, legOrder: 'row' });
           } else if (tk.phase === 'toOutbound') {
             const failedDockId = w.failure?.dockId;
             if (failedDockId && tk.dock?.id === failedDockId) {
               const altDock = OUTBOUND_DOCKS.find((d) => d.id !== failedDockId);
-              nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), dock: altDock, rerouted: true });
+              nextTokens.push({ ...tk, phase: 'toOutbound', t: 0, from: tk.to, to: outboundPos(altDock), dock: altDock, rerouted: true, legOrder: 'row' });
             } else {
               nextTokens.push({ ...tk, phase: 'atOutbound', t: 0 });
             }
           } else if (tk.phase === 'atOutbound') {
             w.sampleOut += 1;
             doneDelta += 1;
-          } else {
+            nextTokens.push({
+              ...tk,
+              phase: 'departing',
+              t: 0,
+              from: outboundPos(tk.dock),
+              to: { col: OFFMAP_OUT_COL, row: tk.dock.row },
+              speed: 1,
+            });
+          } else if (tk.phase !== 'departing') {
             nextTokens.push(tk);
           }
         }
-        if (doneDelta > 0) {
-          const doneCount = ship.doneCount + doneDelta;
-          if (doneCount >= PALLET_SHIP_TOKENS) {
-            w.palletCompleted += ship.size;
-            pushEvent(`팔레트 출고그룹 #${ship.id} 완료, ${ship.size}건 발송`, 'ok');
-            continue;
-          }
-          nextShipments.push({ ...ship, tokens: nextTokens, doneCount });
-        } else {
-          nextShipments.push({ ...ship, tokens: nextTokens });
+        const doneCount = ship.doneCount + doneDelta;
+        if (doneDelta > 0 && doneCount >= PALLET_SHIP_TOKENS && !ship.counted) {
+          w.palletCompleted += ship.size;
+          pushEvent(`팔레트 출고그룹 #${ship.id} 완료, ${ship.size}건 발송`, 'ok');
+          ship = { ...ship, counted: true };
         }
+        if (nextTokens.length) nextShipments.push({ ...ship, tokens: nextTokens, doneCount });
       }
       w.palletShipments = nextShipments;
 
@@ -781,13 +808,52 @@ export default function useSimulation() {
         else if (tk.phase === 'atOutbound') {
           w.urgentCompleted += 1;
           w.sampleOut += 1;
-        }
-        else nextUrgent.push(tk);
+          nextUrgent.push({
+            ...tk,
+            phase: 'departing',
+            t: 0,
+            from: tk.to,
+            to: { col: OFFMAP_OUT_COL, row: tk.to.row },
+          });
+        } else if (tk.phase !== 'departing') nextUrgent.push(tk);
       }
       w.urgentTokens = nextUrgent;
 
+      // -- the day closes once both books are through the building --
+      if (
+        !w.closing &&
+        w.demoStep === 'done' &&
+        w.wavesStarted >= 2 &&
+        !w.waveQueue.length &&
+        !w.groups.length &&
+        !w.palletShipments.length &&
+        !w.urgentTokens.length &&
+        !w.story &&
+        !w.storyQueue.length
+      ) {
+        w.closing = true;
+        enqueueStory(w, {
+          kind: 'banner',
+          tone: 'info',
+          title: '금일 업무를 마감합니다',
+          caption: `출고 완료 ${(w.completedCount + w.palletCompleted).toLocaleString()}건 · 무중단 처리`,
+        });
+        enqueueStory(
+          w,
+          {
+            kind: 'banner',
+            tone: 'info',
+            title: '학습정보와 비학습정보를 구분하여 관리합니다',
+            caption: '금일 판단 이력은 학습 대상으로 분류되어 익일 배부 기준에 반영됩니다',
+          },
+          (world) => {
+            world.finished = true;
+          },
+        );
+      }
+
       // -- incidents fire on their own, the way they do on a real floor --
-      if (w.demoStep === 'done' && w.simClock >= w.autoEventAt && !w.story && !w.storyQueue.length) {
+      if (w.demoStep === 'done' && !w.closing && w.simClock >= w.autoEventAt && !w.story && !w.storyQueue.length) {
         w.autoEventAt = w.simClock + randInt(AUTO_EVENT_MIN_MS, AUTO_EVENT_MAX_MS);
         const options = ['urgent'];
         if (!w.bottleneck) options.push('bottleneck');
@@ -981,8 +1047,11 @@ export default function useSimulation() {
       const script = INCIDENT_SCRIPTS[kind];
       if (script) {
         enqueueStory(w, { kind: 'banner', tone: script.tone, title: script.opening });
-        enqueueStory(w, { kind: 'terminal', title: script.terminalTitle, lines: script.lines });
-        enqueueStory(w, story, effect);
+        enqueueStory(
+          w,
+          { ...story, terminal: { title: script.terminalTitle, lines: script.lines } },
+          effect,
+        );
         enqueueStory(w, {
           kind: 'banner',
           tone: 'info',
@@ -1058,6 +1127,7 @@ export default function useSimulation() {
     bottleneck: snapshot.bottleneck,
     failure: snapshot.failure,
     story: snapshot.story,
+    finished: snapshot.finished,
     callouts: snapshot.callouts,
     coreCaption: snapshot.coreCaption,
     dash,
