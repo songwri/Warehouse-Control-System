@@ -14,8 +14,12 @@ import {
   SORT_COL,
   SORT_HUBS,
   BYPASS_ROW,
-  BYPASS_ROW_MAX,
   BYPASS_COLOR,
+  DOCK_GROUPS,
+  INTEGRATED_COLOR,
+  INTEGRATED_ROWS,
+  INTEGRATED_COLS,
+  inIntegratedBand,
   PACKING_COL,
   PACKING_STATIONS,
   OUTBOUND_COL,
@@ -40,6 +44,11 @@ const VEHICLE_ICON = { robotArm: 'robot-arm', agv: 'forklift', manual: 'forklift
 
 // WCS core sits dead-centre at the top of the board, overlooking every zone.
 const CORE = { x: DESIGN_W / 2, y: 74 };
+
+// Height of an equipment card's icon above its floor tile. The beam and its
+// impact ring both aim here so WCS is seen addressing the machine, not the
+// square of floor it stands on.
+const ICON_LIFT = 20;
 
 function bandOccupancy(row, storageCounts) {
   for (const [key, band] of Object.entries(STORAGE_BANDS)) {
@@ -76,9 +85,19 @@ export default function IsoWarehouse({
         const occ = zone.key === 'storage' ? bandOccupancy(r, storageCounts) : null;
         // Occupancy is ADDED to the checkerboard base, never replaces it, so
         // a full storage band darkens the floor without flattening the grid.
-        const isBypass = zone.key === 'sort' && r <= BYPASS_ROW_MAX;
-        const fill = (checker ? 0.17 : 0.08) + (occ ? occ.ratio * 0.32 : 0) + (isBypass ? 0.06 : 0);
-        list.push({ col: c, row: r, color: isBypass ? BYPASS_COLOR : zone.color, fill });
+        // The box/pcs band stores, picks and sorts in one place, so it gets
+        // one unbroken colour across all three column zones rather than being
+        // sliced into three - the floor itself says "this is a single cell".
+        const integrated = inIntegratedBand(c, r);
+        const isBypass = !integrated && zone.key === 'sort' && r === BYPASS_ROW;
+        // packing is deliberately the darkest warm band so it never reads as
+        // the same floor as outbound's gold
+        const zoneWeight = zone.key === 'packing' ? 0.05 : 0;
+        const fill =
+          (checker ? 0.17 : 0.08) + (occ ? occ.ratio * 0.32 : 0) + (isBypass ? 0.08 : 0) +
+          (integrated ? 0.05 : 0) + zoneWeight;
+        const color = integrated ? INTEGRATED_COLOR : isBypass ? BYPASS_COLOR : zone.color;
+        list.push({ col: c, row: r, color, fill });
       }
     }
     return list;
@@ -106,7 +125,7 @@ export default function IsoWarehouse({
         {/* zone tags run along the bottom-left edge of the floor, filling the
             empty wedge under the board instead of crowding the top */}
         {ZONES.map((z) => {
-          const at = isoPoint((z.colRange[0] + z.colRange[1]) / 2, GRID_ROWS - 1, -52);
+          const at = isoPoint((z.colRange[0] + z.colRange[1]) / 2, GRID_ROWS - 1, -74);
           return (
             <div
               key={z.key}
@@ -126,58 +145,55 @@ export default function IsoWarehouse({
           );
         })}
 
-        {/* scenario brief, filling the empty upper-left corner. It shares the
-            legend's width and left inset below it, so the two read as one
-            column rather than two loose cards at two different widths. */}
-        <div
-          className="pointer-events-none absolute rounded-xl border border-ink-700 px-4 py-3.5"
-          style={{ left: 28, top: 18, width: 268, background: 'rgba(10,15,27,.94)', zIndex: 5000 }}
-        >
-          <div className="font-mono text-ui-micro font-bold uppercase tracking-[0.16em] text-accent-soft">
-            Scenario
-          </div>
-          <div className="mt-1.5 font-display text-ui-head font-bold tracking-tight text-slate-50">
-            1,000 오더 풀 사이클
-          </div>
-          <div className="mt-1.5 text-ui-body leading-relaxed text-slate-400">
-            입고부터 출고까지 전 공정을 WCS가 실시간으로 판단합니다.
-          </div>
-        </div>
+        {/* Floor bracket captions. The docks split into an automated pair and
+            a manual one at both ends of the line; painting that on the floor
+            beats a legend, because the grouping is spatial to begin with. */}
+        {DOCK_GROUPS.map((g) => {
+          const midRow = (g.rowRange[0] + g.rowRange[1]) / 2;
+          const at = isoPoint(g.col, midRow, 88);
+          const zone = g.side === 'inbound' ? ZONES[0] : ZONES[ZONES.length - 1];
+          return (
+            <div
+              key={g.key}
+              className="pointer-events-none absolute whitespace-nowrap font-mono font-bold tracking-[0.06em]"
+              style={{
+                left: at.x,
+                top: at.y,
+                transform: 'translate(-50%, -50%)',
+                fontSize: 14,
+                color: zone.color,
+                textShadow: '0 2px 8px rgba(0,0,0,.9)',
+                zIndex: 4200,
+              }}
+            >
+              {g.label}
+            </div>
+          );
+        })}
 
-        {/* order-type key, sitting in the empty lower-left wedge. Without it
-            the coloured squares moving across the board are unexplained. */}
+        {/* The integrated band's own caption, spanning the columns it owns. */}
         <div
-          className="pointer-events-none absolute rounded-xl border border-ink-700"
-          style={{ left: 28, top: 486, width: 268, background: 'rgba(10,15,27,.94)', zIndex: 5000 }}
+          className="pointer-events-none absolute whitespace-nowrap rounded-md border px-3 py-1 font-mono font-bold tracking-wide"
+          style={{
+            left: isoPoint((INTEGRATED_COLS[0] + INTEGRATED_COLS[1]) / 2 + 2.6, INTEGRATED_ROWS[0] - 1.1, 34).x,
+            top: isoPoint((INTEGRATED_COLS[0] + INTEGRATED_COLS[1]) / 2 + 2.6, INTEGRATED_ROWS[0] - 1.1, 34).y,
+            transform: 'translate(-50%, -50%)',
+            fontSize: 13.5,
+            color: '#7fc7e8',
+            borderColor: `${INTEGRATED_COLOR}66`,
+            background: 'rgba(9,18,26,.9)',
+            zIndex: 900,
+          }}
         >
-          <div className="border-b border-ink-700/80 px-4 py-2.5 font-mono text-ui-micro font-bold uppercase tracking-[0.16em] text-slate-400">
-            오더 유형
-          </div>
-          <div className="flex flex-col gap-2.5 px-4 py-3">
-            {[
-              { c: GROUP_TYPE_COLOR.bulk, t: '총량피킹', s: '분류 경유' },
-              { c: GROUP_TYPE_COLOR.discrete, t: '오더피킹', s: '분류 미경유' },
-              { c: PALLET_SHIP_COLOR, t: '팔레트 직송', s: '셔틀에서 포장 직행' },
-              { c: '#f59e0b', t: '긴급 오더', s: '보관 생략 하이패스' },
-            ].map((r) => (
-              <div key={r.t} className="flex items-baseline gap-2.5">
-                <span
-                  className="mt-0.5 h-2.5 w-2.5 flex-shrink-0 self-center rounded-sm"
-                  style={{ background: r.c, boxShadow: `0 0 8px 1px ${r.c}66` }}
-                />
-                <span className="w-[74px] flex-shrink-0 text-ui-card font-semibold text-slate-100">{r.t}</span>
-                <span className="text-ui-meta text-slate-500">{r.s}</span>
-              </div>
-            ))}
-          </div>
+          보관 · 피킹 · 분류 통합 · 포장 직행
         </div>
 
         {/* express lane caption - sits inside the green bypass strip */}
         <div
           className="pointer-events-none absolute whitespace-nowrap rounded-md border px-2.5 py-1 font-mono text-ui-body font-bold tracking-wide"
           style={{
-            left: isoPoint(SORT_COL + 0.6, BYPASS_ROW - 1.4, 42).x,
-            top: isoPoint(SORT_COL + 0.6, BYPASS_ROW - 1.4, 42).y,
+            left: isoPoint(SORT_COL + 0.9, BYPASS_ROW - 0.6, 40).x,
+            top: isoPoint(SORT_COL + 0.9, BYPASS_ROW - 0.6, 40).y,
             transform: 'translate(-50%, -50%)',
             color: '#5fd0a8',
             borderColor: `${BYPASS_COLOR}59`,
@@ -237,12 +253,12 @@ export default function IsoWarehouse({
         ))}
 
         {/* picking lane markers - moved ahead of sort */}
-        {Object.entries(PICKING_LANES).map(([key, lane]) => (
+        {Object.entries(PICKING_LANES).map(([key, lane], i) => (
           <IsoBuilding
             key={key}
-            col={PICKING_COL_RANGE[0] + 1}
+            col={PICKING_COL_RANGE[0] + 1 + i * 0.7}
             row={(lane.rowRange[0] + lane.rowRange[1]) / 2}
-            width={112}
+            width={124}
             elevation={42}
             borderColor="rgba(59,171,132,.45)"
           >
@@ -311,8 +327,8 @@ export default function IsoWarehouse({
                 key={pulse.key}
                 x1={wcsCore.x}
                 y1={wcsCore.y}
-                x2={isoPoint(pulse.col, pulse.row).x}
-                y2={isoPoint(pulse.col, pulse.row).y}
+                x2={isoPoint(pulse.col, pulse.row, ICON_LIFT).x}
+                y2={isoPoint(pulse.col, pulse.row, ICON_LIFT).y}
                 stroke="#8fb8ff"
                 strokeWidth="2.5"
                 strokeDasharray="3 6"
@@ -328,7 +344,7 @@ export default function IsoWarehouse({
           <motion.div
             key={`target-${pulse.key}`}
             className="absolute rounded-full border-2 border-accent-soft"
-            style={{ left: isoPoint(pulse.col, pulse.row).x - 14, top: isoPoint(pulse.col, pulse.row).y - 14, width: 28, height: 28, zIndex: 9000 }}
+            style={{ left: isoPoint(pulse.col, pulse.row, ICON_LIFT).x - 16, top: isoPoint(pulse.col, pulse.row, ICON_LIFT).y - 16, width: 32, height: 32, zIndex: 9000 }}
             initial={{ opacity: 0.9, scale: 0.5 }}
             animate={{ opacity: 0, scale: 1.6 }}
             transition={{ duration: 0.9 }}

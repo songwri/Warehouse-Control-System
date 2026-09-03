@@ -4,7 +4,7 @@ import { TOTAL_ORDERS } from '../hooks/useSimulation.js';
 // control strip stacked on top of each other, which spent ~100px of vertical
 // room on two weak edges and split "what is this" from "how do I drive it".
 // Merged: identity left, transport in the middle, scenario triggers right.
-function TriggerButton({ index, label, sub, tone, onClick, disabled }) {
+function TriggerButton({ index, label, tone, onClick, disabled }) {
   const toneMap = {
     danger: { border: 'rgba(239,83,80,.45)', text: '#f3928f', hover: 'rgba(239,83,80,.14)' },
     warn: { border: 'rgba(229,165,60,.45)', text: '#eabc71', hover: 'rgba(229,165,60,.14)' },
@@ -23,10 +23,7 @@ function TriggerButton({ index, label, sub, tone, onClick, disabled }) {
       >
         {index}
       </span>
-      <span className="leading-none">
-        <span className="block text-ui-body font-semibold leading-tight">{label}</span>
-        <span className="block font-mono text-ui-micro uppercase leading-tight opacity-60">{sub}</span>
-      </span>
+      <span className="text-ui-card font-semibold leading-none">{label}</span>
     </button>
   );
 }
@@ -54,8 +51,8 @@ export default function ControlBar({
           <span className="block font-display text-ui-lead font-bold tracking-tight text-slate-100">
             WCS Simulator
           </span>
-          <span className="block font-mono text-ui-micro uppercase tracking-[0.12em] text-slate-500">
-            Warehouse Control System
+          <span className="block font-mono text-ui-micro tracking-[0.12em] text-slate-500">
+            물류센터 통합 제어
           </span>
         </span>
       </div>
@@ -120,11 +117,11 @@ export default function ControlBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2.5">
-        <span className="font-mono text-ui-micro uppercase tracking-[0.14em] text-slate-600">Event Trigger</span>
+        <span className="font-mono text-ui-micro tracking-[0.14em] text-slate-600">돌발 상황</span>
         <div className="flex items-center gap-2">
-          <TriggerButton index="1" label="병목 발생" sub="Bottleneck" tone="danger" onClick={onBottleneck} disabled={cooldown.bottleneck} />
-          <TriggerButton index="2" label="긴급 오더" sub="Urgent Order" tone="warn" onClick={onUrgent} disabled={cooldown.urgent} />
-          <TriggerButton index="3" label="설비 고장" sub="Equipment Failure" tone="danger" onClick={onFailure} disabled={cooldown.failure} />
+          <TriggerButton index="1" label="병목 발생" tone="danger" onClick={onBottleneck} disabled={cooldown.bottleneck} />
+          <TriggerButton index="2" label="긴급 오더" tone="warn" onClick={onUrgent} disabled={cooldown.urgent} />
+          <TriggerButton index="3" label="설비 고장" tone="danger" onClick={onFailure} disabled={cooldown.failure} />
         </div>
       </div>
     </header>

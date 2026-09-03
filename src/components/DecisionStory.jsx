@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import CmdWindow, { cmdDuration } from './CmdWindow.jsx';
+import { TONE, WcsAvatar, CloseButton, ProgressBar } from './StoryChrome.jsx';
 
 // One cinematic runs ~20s: long enough to actually read all three stages.
 const INTRO_MS = 700;
@@ -13,11 +15,23 @@ const TOTAL_MS = INTRO_MS + 3 * STAGE_MS + OUTRO_MS;
 const CORNER_STEP_MS = 1100;
 const CORNER_HOLD_MS = 2600;
 
-const TONE = {
-  info: { accent: '#60a5fa', border: 'rgba(96,165,250,.55)' },
-  danger: { accent: '#f87171', border: 'rgba(248,113,113,.6)' },
-  urgent: { accent: '#fbbf24', border: 'rgba(251,191,36,.6)' },
-};
+// Scripted-opening beats. A banner is a title card; candidates is WCS showing
+// its options and picking one; terminal is the raw analysis window.
+const BANNER_MS = 4200;
+const CAND_INTRO_MS = 900;
+const CAND_STEP_MS = 800;   // each option appearing in turn
+const CAND_VERDICT_MS = 2600;
+
+// How long the whole thing runs, by kind.
+function runtimeOf(story) {
+  if (!story) return TOTAL_MS;
+  if (story.kind === 'banner') return BANNER_MS;
+  if (story.kind === 'terminal') return cmdDuration(story.lines, story.typed);
+  if (story.kind === 'candidates') {
+    return CAND_INTRO_MS + story.options.length * CAND_STEP_MS + CAND_VERDICT_MS;
+  }
+  return TOTAL_MS;
+}
 
 // The three stages every WCS decision passes through, laid out left to right.
 const STAGES = [
@@ -97,6 +111,8 @@ export default function DecisionStory({ story, onFinish }) {
   const finishedRef = useRef(false);
 
   const modal = !!story?.modal;
+  const kind = story?.kind || 'stages';
+  const runtime = runtimeOf(story);
 
   // Ends the cinematic early. It still calls onFinish, so the decision the
   // narration was explaining is applied and the board resumes: closing skips
@@ -118,10 +134,10 @@ export default function DecisionStory({ story, onFinish }) {
     const iv = setInterval(() => {
       const e = Date.now() - startedAt;
       setElapsed(e);
-      if (e >= TOTAL_MS) dismiss();
+      if (e >= runtime) dismiss();
     }, 50);
     return () => clearInterval(iv);
-  }, [story, modal, dismiss]);
+  }, [story, modal, runtime, dismiss]);
 
   // Escape closes it too - a modal that traps you until a timer runs out is
   // the one thing a viewer will reach for the keyboard over.
@@ -144,6 +160,139 @@ export default function DecisionStory({ story, onFinish }) {
 
   if (!story) return null;
   const tone = TONE[story.tone] || TONE.info;
+
+  const overlay = (children) => (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          key={story.id}
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-ink-950/92 backdrop-blur-[4px]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  // ---- title card: WCS speaking straight to the room ----
+  if (kind === 'banner') {
+    return overlay(
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        className="flex w-[760px] max-w-[94vw] items-center gap-7 rounded-2xl border px-9 py-7 shadow-2xl"
+        style={{ background: '#0a0f1b', borderColor: tone.border, boxShadow: `0 0 70px -14px ${tone.accent}` }}
+      >
+        <WcsAvatar size={104} />
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-ui-head font-bold leading-snug text-slate-50">{story.title}</p>
+          {story.caption && <p className="mt-2 text-ui-card leading-relaxed text-slate-400">{story.caption}</p>}
+          <ProgressBar pct={(elapsed / runtime) * 100} accent={tone.accent} />
+        </div>
+        <CloseButton onClick={dismiss} />
+      </motion.div>,
+    );
+  }
+
+  // ---- raw analysis terminal ----
+  if (kind === 'terminal') {
+    return overlay(
+      <div className="flex flex-col items-center gap-4">
+        <CmdWindow title={story.title} lines={story.lines} elapsed={elapsed} typed={story.typed} />
+        <button
+          type="button"
+          onClick={dismiss}
+          className="font-mono text-ui-meta uppercase tracking-widest text-slate-500 transition-colors hover:text-slate-300"
+        >
+          건너뛰기 (Esc)
+        </button>
+      </div>,
+    );
+  }
+
+  // ---- WCS weighing named options and committing to one ----
+  if (kind === 'candidates') {
+    const shown = Math.max(0, Math.floor((elapsed - CAND_INTRO_MS) / CAND_STEP_MS) + 1);
+    const decided = elapsed >= CAND_INTRO_MS + story.options.length * CAND_STEP_MS;
+    return overlay(
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -12 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="w-[760px] max-w-[94vw] rounded-2xl border px-9 py-8 shadow-2xl"
+        style={{ background: '#0a0f1b', borderColor: tone.border, boxShadow: `0 0 70px -14px ${tone.accent}` }}
+      >
+        <div className="flex items-center justify-between gap-4 border-b border-ink-700 pb-4">
+          <span className="font-display text-xl font-bold tracking-wide" style={{ color: tone.accent }}>
+            {story.title}
+          </span>
+          <CloseButton onClick={dismiss} />
+        </div>
+
+        <div className="mt-6 flex items-start gap-6">
+          <WcsAvatar size={96} />
+          <div className="min-w-0 flex-1">
+            <p className="text-ui-lead leading-relaxed text-slate-200">{story.question}</p>
+
+            <div className="mt-4 flex flex-col gap-2">
+              {story.options.map((o, i) => {
+                const visibleRow = i < shown;
+                const picked = decided && o.chosen;
+                const dropped = decided && !o.chosen;
+                return (
+                  <motion.div
+                    key={o.key}
+                    animate={{
+                      opacity: visibleRow ? (dropped ? 0.3 : 1) : 0,
+                      x: visibleRow ? 0 : -10,
+                    }}
+                    transition={{ duration: 0.3 }}
+                    className="flex items-center gap-3 rounded-lg border px-3.5 py-2.5"
+                    style={{
+                      borderColor: picked ? tone.border : 'rgba(35,46,70,1)',
+                      background: picked ? `${tone.accent}1f` : 'rgba(16,24,40,.7)',
+                      boxShadow: picked ? `0 0 22px -8px ${tone.accent}` : 'none',
+                    }}
+                  >
+                    <span
+                      className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border text-[10px] font-bold"
+                      style={{
+                        borderColor: picked ? tone.accent : 'rgba(100,116,139,.5)',
+                        background: picked ? tone.accent : 'transparent',
+                        color: picked ? '#0a0f1b' : '#64748b',
+                      }}
+                    >
+                      {picked ? '✓' : i + 1}
+                    </span>
+                    <span className="text-ui-card font-semibold text-slate-100">{o.label}</span>
+                    <span className="text-ui-meta text-slate-500">{o.note}</span>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            <motion.p
+              animate={{ opacity: decided ? 1 : 0, y: decided ? 0 : 6 }}
+              transition={{ duration: 0.35 }}
+              className="mt-4 text-ui-card font-bold"
+              style={{ color: tone.accent }}
+            >
+              {story.verdict}
+            </motion.p>
+          </div>
+        </div>
+
+        <ProgressBar pct={(elapsed / runtime) * 100} accent={tone.accent} />
+      </motion.div>,
+    );
+  }
 
   if (modal) {
     const lines = story.lines || [];
@@ -327,7 +476,7 @@ export default function DecisionStory({ story, onFinish }) {
               <div className="mt-5 h-1 w-full overflow-hidden rounded-full bg-ink-800">
                 <div
                   className="h-full rounded-full transition-[width] duration-100 ease-linear"
-                  style={{ background: tone.accent, width: `${Math.min(100, (elapsed / TOTAL_MS) * 100)}%` }}
+                  style={{ background: tone.accent, width: `${Math.min(100, (elapsed / runtime) * 100)}%` }}
                 />
               </div>
             </motion.div>
