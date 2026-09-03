@@ -37,6 +37,9 @@ import {
   todayLabel,
   inboundTerminalLines,
   planTerminalLines,
+  planDecisionLines,
+  releaseTerminalLines,
+  ALLOCATION_CANDIDATES,
   buildReleases,
   INBOUND_CANDIDATES,
   INCIDENT_SCRIPTS,
@@ -97,10 +100,6 @@ function freshWorld() {
     failure: null,
     story: null,
     storyQueue: [],
-    // The scripted opening owns the inbound decision now, so the ambient
-    // one-off inbound cinematic starts already spent. Without this it fired
-    // on the first truck and cut in front of the script's own next beat.
-    storyInboundShown: true,
     storyGroupingShown: false,
     firstInboundDone: false,
     wavesStarted: 0,
@@ -193,9 +192,19 @@ function startWave(w, enqueue, plan, opening) {
     title: opening,
     caption: `총 ${plan.total.toLocaleString()}건의 출고 오더가 일괄 접수되었습니다`,
   });
+  // Same shape as the inbound decision: 상황 인지 opens the analysis
+  // terminal, 대안 탐색 opens the comparison of allocation strategies, and
+  // 최적 결정 commits. It was a bare terminal beat, which showed the plan
+  // without ever showing WCS deciding on it.
   enqueue(
     w,
-    { kind: 'terminal', title: `${plan.title} 분석 및 작업 할당`, lines: planTerminalLines(plan), typed: true },
+    {
+      title: `WCS ${plan.title} 작업 할당`,
+      tone: 'info',
+      terminal: { title: `${plan.title} 분석 및 작업 할당`, lines: planTerminalLines(plan), typed: true },
+      options: ALLOCATION_CANDIDATES,
+      lines: planDecisionLines(plan),
+    },
     (world) => {
       const laneTotal = (key) =>
         key === 'shuttle'
@@ -459,18 +468,6 @@ export default function useSimulation() {
           flashPulse(bandPos.col, bandPos.row);
           setCoreCaption(w, `판단: ${v.dock.method} 입고 → ${STORAGE_BANDS[bandKey].label} 배정`);
           w.counts = { ...w.counts, inbound: w.counts.inbound + 1 };
-          if (!w.storyInboundShown) {
-            w.storyInboundShown = true;
-            enqueueStory(w, {
-              title: 'WCS 입고 의사결정',
-              tone: 'info',
-              lines: [
-                `${v.dock.method} 도크 차량 도착, 적재 형태 판독 결과 ${cargoLabel} 입고`,
-                `회전율·단위·가용 슬롯 대조, 보관존 후보 3개 비교`,
-                `${STORAGE_BANDS[bandKey].label} 배정, ${v.dock.method} 하차 지시 하달`,
-              ],
-            });
-          }
           nextVehicles.push({ ...v, phase: 'analyzing', t: 0, cargoType, bandKey });
         } else if (v.phase === 'analyzing') {
           nextVehicles.push({ ...v, phase: 'unloading', t: 0 });
@@ -591,6 +588,12 @@ export default function useSimulation() {
           enqueueStory(w, {
             title: `WCS 오더 그룹핑 의사결정 · OG-${groupId}`,
             tone: 'info',
+            // same three-window shape as every other decision: 상황 인지
+            // opens the terminal, 대안 탐색 opens the route comparison
+            terminal: {
+              title: `OG-${groupId} 편성 분석`,
+              lines: releaseTerminalLines(plan, rel, remaining),
+            },
             options: [
               ...plan.stations.map((st) => ({
                 key: st.key,

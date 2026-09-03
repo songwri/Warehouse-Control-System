@@ -257,3 +257,36 @@ export function buildReleases(plan) {
   }
   return out.map((r, i) => ({ ...r, seq: i + 1 }));
 }
+
+
+// ---- The planning decision itself ------------------------------------
+// A wave is not just analysed, it is DECIDED: three ways to spread a book
+// across the floor, of which capacity-proportional is the one that neither
+// starves the fast routes nor drowns the slow ones. Naming the two rejected
+// strategies is what makes the resulting numbers read as a judgement rather
+// than as an arbitrary split.
+export const ALLOCATION_CANDIDATES = [
+  { key: 'even', label: '설비 균등 배분', note: '저속 설비에서 병목 발생' },
+  { key: 'single', label: '단일 설비 집중', note: '처리량 한계 초과' },
+  { key: 'capacity', label: '가용 능력 비례 배분', note: '전 설비 가동률 균형', chosen: true },
+];
+
+export function planDecisionLines(plan) {
+  const top = plan.stations[0];
+  return [
+    `${plan.title} ${plan.total.toLocaleString()}건 일괄 접수, 평균 오더라인 ${plan.avgSku} 확인`,
+    `배분 방식 3종 비교, 설비별 가용 능력과 오더 유형 대조`,
+    `가용 능력 비례 배분 확정. 팔레트 ${plan.pallet.toLocaleString()}건 직송, 박스/pcs ${plan.boxPcs.toLocaleString()}건 중 ${top.label} ${top.orders.toLocaleString()}건 선배정`,
+  ];
+}
+
+// ---- One order group leaving for the floor ---------------------------
+export function releaseTerminalLines(plan, rel, remaining) {
+  return [
+    { text: `${rel.label} 배정분 조회`, value: `${plan.laneTotal(rel.lane).toLocaleString()}건`, ok: true },
+    { text: '설비 큐 적재 상태 확인', value: '여유', ok: true },
+    { text: '선행 그룹 처리 진척 확인', value: '정상', ok: true },
+    { text: '그룹 편성 단위 산정', value: `${rel.size.toLocaleString()}건`, ok: true },
+    { text: '잔여 미편성 물량', value: `${remaining.toLocaleString()}건`, ok: true },
+  ];
+}
