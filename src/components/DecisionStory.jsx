@@ -21,6 +21,16 @@ function terminalWindow(story) {
   return story?.terminal ? cmdDuration(story.terminal.lines, story.terminal.typed) : 0;
 }
 
+// 대안 탐색 opens a second window of its own: WCS laying the candidates out
+// and settling on one. Listing them only as a footnote under the conclusion
+// showed the answer without ever showing the weighing, which is the stage
+// this whole panel exists to make visible.
+const CAND_STEP_MS = 750;   // one candidate appearing
+const CAND_SETTLE_MS = 3200; // the beat where it commits
+function candidateWindow(story) {
+  return story?.options?.length ? story.options.length * CAND_STEP_MS + CAND_SETTLE_MS : 0;
+}
+
 const CORNER_STEP_MS = 1100;
 const CORNER_HOLD_MS = 2600;
 
@@ -33,7 +43,7 @@ function runtimeOf(story) {
   if (!story) return TOTAL_MS;
   if (story.kind === 'banner') return BANNER_MS;
   if (story.kind === 'terminal') return cmdDuration(story.lines, story.typed);
-  return TOTAL_MS + terminalWindow(story);
+  return TOTAL_MS + terminalWindow(story) + candidateWindow(story);
 }
 
 // The three stages every WCS decision passes through, laid out left to right.
@@ -75,6 +85,69 @@ const STAGES = [
     ),
   },
 ];
+
+// WCS laying its options out and settling on one. Opened by 대안 탐색.
+function CandidatePanel({ options, elapsed, tone }) {
+  const shown = Math.floor(elapsed / CAND_STEP_MS) + 1;
+  const decided = elapsed >= options.length * CAND_STEP_MS + CAND_STEP_MS;
+  const picked = options.find((o) => o.chosen);
+
+  return (
+    <div className="mt-7 min-h-[128px] rounded-xl border border-ink-700 bg-ink-950/70 px-5 py-4">
+      <div className="flex items-start gap-4">
+        <WcsAvatar size={72} />
+        <div className="min-w-0 flex-1">
+          <p className="mb-2.5 font-mono text-ui-micro uppercase tracking-[0.16em] text-slate-500">
+            {decided ? '대안 비교 완료' : '가용 대안 비교중'}
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {options.map((o, i) => {
+              const open = i < shown;
+              const isPick = decided && o.chosen;
+              const dropped = decided && !o.chosen;
+              return (
+                <motion.div
+                  key={o.key}
+                  animate={{ opacity: open ? (dropped ? 0.3 : 1) : 0, x: open ? 0 : -8 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex items-center gap-3 rounded-lg border px-3 py-1.5"
+                  style={{
+                    borderColor: isPick ? tone.border : 'rgba(35,46,70,1)',
+                    background: isPick ? `${tone.accent}1f` : 'rgba(16,24,40,.6)',
+                    boxShadow: isPick ? `0 0 20px -8px ${tone.accent}` : 'none',
+                  }}
+                >
+                  <span
+                    className="flex flex-shrink-0 items-center justify-center rounded-full border text-[10px] font-bold"
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderColor: isPick ? tone.accent : 'rgba(100,116,139,.5)',
+                      background: isPick ? tone.accent : 'transparent',
+                      color: isPick ? '#0a0f1b' : '#64748b',
+                    }}
+                  >
+                    {isPick ? '✓' : i + 1}
+                  </span>
+                  <span className="text-ui-card font-semibold text-slate-100">{o.label}</span>
+                  <span className="truncate text-ui-meta text-slate-500">{o.note}</span>
+                </motion.div>
+              );
+            })}
+          </div>
+          <motion.p
+            animate={{ opacity: decided ? 1 : 0 }}
+            transition={{ duration: 0.3 }}
+            className="mt-2.5 text-ui-body font-bold"
+            style={{ color: tone.accent }}
+          >
+            {picked ? `${picked.label} 선택` : ''}
+          </motion.p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function StageIcon({ paths, className }) {
   return (
@@ -222,20 +295,31 @@ export default function DecisionStory({ story, onFinish }) {
   if (modal) {
     const lines = story.lines || [];
     const termMs = terminalWindow(story);
+    const candMs = candidateWindow(story);
     const raw = elapsed - INTRO_MS;
-    // the terminal sits between stage 0 and stage 1; while it is open the
-    // stage clock is held, so DETECT stays "done" and EVALUATE stays "pending"
-    const inTerminal = termMs > 0 && raw >= STAGE_MS && raw < STAGE_MS + termMs;
-    const termElapsed = inTerminal ? raw - STAGE_MS : 0;
-    // While the terminal is open the stage clock is pinned just short of the
-    // first boundary: 상황 인지 reads done, 대안 탐색 has not started. Letting
-    // it land exactly on the boundary lit EVALUATE behind the terminal, so
-    // the card claimed to be weighing options while showing raw input.
-    const t = inTerminal
-      ? STAGE_MS - 1
-      : raw < STAGE_MS
-        ? raw
-        : raw - Math.min(termMs, Math.max(0, raw - STAGE_MS));
+
+    // Two windows open inside the run, each after the stage that calls for it:
+    // the terminal after 상황 인지, the candidate weigh-up after 대안 탐색.
+    // While either is open the stage clock is pinned just SHORT of the next
+    // boundary, so the stage that opened the window reads done and the one
+    // after it has not started. Landing exactly on a boundary lit the next
+    // stage behind the window, which made the card claim to be doing one
+    // thing while showing another.
+    const T0 = STAGE_MS;
+    const T1 = T0 + termMs;
+    const T2 = T1 + STAGE_MS;
+    const T3 = T2 + candMs;
+    const inTerminal = termMs > 0 && raw >= T0 && raw < T1;
+    const inCandidates = candMs > 0 && raw >= T2 && raw < T3;
+    const termElapsed = inTerminal ? raw - T0 : 0;
+    const candElapsed = inCandidates ? raw - T2 : 0;
+
+    let t;
+    if (raw < T0) t = raw;
+    else if (raw < T1) t = STAGE_MS - 1;
+    else if (raw < T2) t = raw - termMs;
+    else if (raw < T3) t = 2 * STAGE_MS - 1;
+    else t = raw - termMs - candMs;
     const activeStage = Math.max(0, Math.min(2, Math.floor(t / STAGE_MS)));
     const inStage = t - activeStage * STAGE_MS;
 
@@ -387,7 +471,9 @@ export default function DecisionStory({ story, onFinish }) {
 
               {/* the analysis terminal, opened by 상황 인지 and closed before
                   대안 탐색 - the same panel, so the card never jumps size */}
-              {inTerminal ? (
+              {inCandidates ? (
+                <CandidatePanel options={story.options} elapsed={candElapsed} tone={tone} />
+              ) : inTerminal ? (
                 <div className="mt-7 min-h-[128px]">
                   <CmdWindow
                     title={story.terminal.title}
@@ -425,50 +511,35 @@ export default function DecisionStory({ story, onFinish }) {
               </div>
               )}
 
-              {/* What DECIDE actually decided. The stage row says WCS reached a
-                  conclusion; without the candidates beside it, the room never
-                  sees what it chose BETWEEN, which is where the judgement is.
-                  Revealed as the third stage lights up so it lands as the
-                  answer to the reasoning above, not as a fourth beat. */}
-              {story.options && (
-                <div className="mt-4 flex gap-2">
-                  {story.options.map((o, i) => {
-                    const open = activeStage >= 2;
-                    const decided = activeStage >= 2 && inStage >= TYPE_MS + OK_MS;
-                    const picked = decided && o.chosen;
-                    const dropped = decided && !o.chosen;
-                    return (
-                      <motion.div
-                        key={o.key}
-                        animate={{ opacity: open ? (dropped ? 0.28 : 1) : 0, y: open ? 0 : 8 }}
-                        transition={{ duration: 0.32, delay: open ? i * 0.12 : 0 }}
-                        className="flex flex-1 items-center gap-2 rounded-lg border px-3 py-2"
-                        style={{
-                          borderColor: picked ? tone.border : 'rgba(35,46,70,1)',
-                          background: picked ? `${tone.accent}1f` : 'rgba(16,24,40,.7)',
-                          boxShadow: picked ? `0 0 20px -8px ${tone.accent}` : 'none',
-                        }}
-                      >
-                        <span
-                          className="flex h-4.5 w-4.5 flex-shrink-0 items-center justify-center rounded-full border text-[9px] font-bold"
-                          style={{
-                            width: 18,
-                            height: 18,
-                            borderColor: picked ? tone.accent : 'rgba(100,116,139,.5)',
-                            background: picked ? tone.accent : 'transparent',
-                            color: picked ? '#0a0f1b' : '#64748b',
-                          }}
-                        >
-                          {picked ? '✓' : i + 1}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-ui-body font-bold text-slate-100">{o.label}</span>
-                          <span className="block truncate text-ui-micro tracking-normal text-slate-500">{o.note}</span>
-                        </span>
-                      </motion.div>
-                    );
-                  })}
-                </div>
+              {/* 최적 결정 confirms the pick. The candidates themselves were
+                  laid out and compared one stage earlier, so repeating all of
+                  them here would read as the panel losing its place. */}
+              {story.options && activeStage >= 2 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35 }}
+                  className="mt-4 flex items-center gap-3 rounded-lg border px-4 py-2.5"
+                  style={{
+                    borderColor: tone.border,
+                    background: `${tone.accent}17`,
+                    boxShadow: `0 0 22px -10px ${tone.accent}`,
+                  }}
+                >
+                  <span
+                    className="flex flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                    style={{ width: 20, height: 20, background: tone.accent, color: '#0a0f1b' }}
+                  >
+                    ✓
+                  </span>
+                  <span className="font-mono text-ui-micro uppercase tracking-[0.14em] text-slate-500">확정</span>
+                  <span className="text-ui-card font-bold" style={{ color: tone.accent }}>
+                    {(story.options.find((o) => o.chosen) || {}).label}
+                  </span>
+                  <span className="truncate text-ui-meta text-slate-500">
+                    {(story.options.find((o) => o.chosen) || {}).note}
+                  </span>
+                </motion.div>
               )}
 
               <div className="mt-5 h-1 w-full overflow-hidden rounded-full bg-ink-800">
