@@ -15,21 +15,15 @@ const TOTAL_MS = INTRO_MS + 3 * STAGE_MS + OUTRO_MS;
 const CORNER_STEP_MS = 1100;
 const CORNER_HOLD_MS = 2600;
 
-// Scripted-opening beats. A banner is a title card; candidates is WCS showing
-// its options and picking one; terminal is the raw analysis window.
+// Scripted-opening beats. A banner is a title card, terminal is the raw
+// analysis window; every decision itself uses the three-stage form.
 const BANNER_MS = 4200;
-const CAND_INTRO_MS = 900;
-const CAND_STEP_MS = 800;   // each option appearing in turn
-const CAND_VERDICT_MS = 2600;
 
 // How long the whole thing runs, by kind.
 function runtimeOf(story) {
   if (!story) return TOTAL_MS;
   if (story.kind === 'banner') return BANNER_MS;
   if (story.kind === 'terminal') return cmdDuration(story.lines, story.typed);
-  if (story.kind === 'candidates') {
-    return CAND_INTRO_MS + story.options.length * CAND_STEP_MS + CAND_VERDICT_MS;
-  }
   return TOTAL_MS;
 }
 
@@ -216,84 +210,6 @@ export default function DecisionStory({ story, onFinish }) {
     );
   }
 
-  // ---- WCS weighing named options and committing to one ----
-  if (kind === 'candidates') {
-    const shown = Math.max(0, Math.floor((elapsed - CAND_INTRO_MS) / CAND_STEP_MS) + 1);
-    const decided = elapsed >= CAND_INTRO_MS + story.options.length * CAND_STEP_MS;
-    return overlay(
-      <motion.div
-        initial={{ opacity: 0, y: 24, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -12 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-[760px] max-w-[94vw] rounded-2xl border px-9 py-8 shadow-2xl"
-        style={{ background: '#0a0f1b', borderColor: tone.border, boxShadow: `0 0 70px -14px ${tone.accent}` }}
-      >
-        <div className="flex items-center justify-between gap-4 border-b border-ink-700 pb-4">
-          <span className="font-display text-xl font-bold tracking-wide" style={{ color: tone.accent }}>
-            {story.title}
-          </span>
-          <CloseButton onClick={dismiss} />
-        </div>
-
-        <div className="mt-6 flex items-start gap-6">
-          <WcsAvatar size={96} />
-          <div className="min-w-0 flex-1">
-            <p className="text-ui-lead leading-relaxed text-slate-200">{story.question}</p>
-
-            <div className="mt-4 flex flex-col gap-2">
-              {story.options.map((o, i) => {
-                const visibleRow = i < shown;
-                const picked = decided && o.chosen;
-                const dropped = decided && !o.chosen;
-                return (
-                  <motion.div
-                    key={o.key}
-                    animate={{
-                      opacity: visibleRow ? (dropped ? 0.3 : 1) : 0,
-                      x: visibleRow ? 0 : -10,
-                    }}
-                    transition={{ duration: 0.3 }}
-                    className="flex items-center gap-3 rounded-lg border px-3.5 py-2.5"
-                    style={{
-                      borderColor: picked ? tone.border : 'rgba(35,46,70,1)',
-                      background: picked ? `${tone.accent}1f` : 'rgba(16,24,40,.7)',
-                      boxShadow: picked ? `0 0 22px -8px ${tone.accent}` : 'none',
-                    }}
-                  >
-                    <span
-                      className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border text-[10px] font-bold"
-                      style={{
-                        borderColor: picked ? tone.accent : 'rgba(100,116,139,.5)',
-                        background: picked ? tone.accent : 'transparent',
-                        color: picked ? '#0a0f1b' : '#64748b',
-                      }}
-                    >
-                      {picked ? '✓' : i + 1}
-                    </span>
-                    <span className="text-ui-card font-semibold text-slate-100">{o.label}</span>
-                    <span className="text-ui-meta text-slate-500">{o.note}</span>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            <motion.p
-              animate={{ opacity: decided ? 1 : 0, y: decided ? 0 : 6 }}
-              transition={{ duration: 0.35 }}
-              className="mt-4 text-ui-card font-bold"
-              style={{ color: tone.accent }}
-            >
-              {story.verdict}
-            </motion.p>
-          </div>
-        </div>
-
-        <ProgressBar pct={(elapsed / runtime) * 100} accent={tone.accent} />
-      </motion.div>,
-    );
-  }
-
   if (modal) {
     const lines = story.lines || [];
     const t = elapsed - INTRO_MS;
@@ -335,6 +251,7 @@ export default function DecisionStory({ story, onFinish }) {
             >
               <div className="flex items-center justify-between gap-4 border-b border-ink-700 pb-4">
                 <div className="flex min-w-0 items-center gap-3">
+                  <WcsAvatar size={46} />
                   <span
                     className={t < 0 ? 'h-2.5 w-2.5 rounded-full pulse-ring' : 'h-2.5 w-2.5 rounded-full'}
                     style={{ background: tone.accent }}
@@ -472,6 +389,52 @@ export default function DecisionStory({ story, onFinish }) {
                   })}
                 </ol>
               </div>
+
+              {/* What DECIDE actually decided. The stage row says WCS reached a
+                  conclusion; without the candidates beside it, the room never
+                  sees what it chose BETWEEN, which is where the judgement is.
+                  Revealed as the third stage lights up so it lands as the
+                  answer to the reasoning above, not as a fourth beat. */}
+              {story.options && (
+                <div className="mt-4 flex gap-2">
+                  {story.options.map((o, i) => {
+                    const open = activeStage >= 2;
+                    const decided = activeStage >= 2 && inStage >= TYPE_MS + OK_MS;
+                    const picked = decided && o.chosen;
+                    const dropped = decided && !o.chosen;
+                    return (
+                      <motion.div
+                        key={o.key}
+                        animate={{ opacity: open ? (dropped ? 0.28 : 1) : 0, y: open ? 0 : 8 }}
+                        transition={{ duration: 0.32, delay: open ? i * 0.12 : 0 }}
+                        className="flex flex-1 items-center gap-2 rounded-lg border px-3 py-2"
+                        style={{
+                          borderColor: picked ? tone.border : 'rgba(35,46,70,1)',
+                          background: picked ? `${tone.accent}1f` : 'rgba(16,24,40,.7)',
+                          boxShadow: picked ? `0 0 20px -8px ${tone.accent}` : 'none',
+                        }}
+                      >
+                        <span
+                          className="flex h-4.5 w-4.5 flex-shrink-0 items-center justify-center rounded-full border text-[9px] font-bold"
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderColor: picked ? tone.accent : 'rgba(100,116,139,.5)',
+                            background: picked ? tone.accent : 'transparent',
+                            color: picked ? '#0a0f1b' : '#64748b',
+                          }}
+                        >
+                          {picked ? '✓' : i + 1}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-ui-body font-bold text-slate-100">{o.label}</span>
+                          <span className="block truncate text-ui-micro tracking-normal text-slate-500">{o.note}</span>
+                        </span>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
 
               <div className="mt-5 h-1 w-full overflow-hidden rounded-full bg-ink-800">
                 <div

@@ -158,6 +158,11 @@ export const INCIDENT_SCRIPTS = {
       { text: '우회 경로 산출', value: '완료', ok: true },
     ],
     learned: '병목 발생 건을 학습하여 물량 배부 기준에 반영하였습니다. 동일 조건에서는 사전에 분산 배정합니다',
+    options: [
+      { key: 'libiao', label: 'AGV(로봇)', note: '현재 과부하, 대기열 증가' },
+      { key: 'das', label: 'DAS(컨베이어)', note: '여유 용량 확보', chosen: true },
+      { key: 'hold', label: '투입 보류', note: '출고 마감 지연 발생' },
+    ],
   },
   urgent: {
     tone: 'urgent',
@@ -170,6 +175,11 @@ export const INCIDENT_SCRIPTS = {
       { text: '최단 경로 산출', value: '하이패스', ok: true },
     ],
     learned: '긴급 오더 패턴을 학습하여 해당 SKU를 상시 하이패스 대상으로 등록하였습니다',
+    options: [
+      { key: 'climber', label: '박스/pcs 보관자동화', note: '재고 보유, 보관 단계 생략 가능', chosen: true },
+      { key: 'dps', label: 'DPS(컨베이어)', note: '가용, 대기열 존재' },
+      { key: 'dpc', label: 'DPC(카트)', note: '가용, 처리 속도 낮음' },
+    ],
   },
   failure: {
     tone: 'danger',
@@ -182,6 +192,9 @@ export const INCIDENT_SCRIPTS = {
       { text: '재배정 시 출고 지연', value: '최소', ok: true },
     ],
     learned: '설비 고장 정보를 학습하여 설비업체에 예지정비를 요청하였습니다. 동일 부품군은 사전 교체 대상으로 등록됩니다',
+    // the chosen dock is filled in at fire time, since which one failed
+    // decides which alternates are even on the table
+    options: null,
   },
 };
 

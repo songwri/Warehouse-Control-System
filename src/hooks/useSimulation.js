@@ -159,12 +159,14 @@ function advanceDemo(w, dt, enqueue) {
     w.demoStep = 'inboundAssign';
   } else if (step === 'inboundAssign') {
     enqueue(w, {
-      kind: 'candidates',
+      title: 'WCS 입고 방식 배정',
       tone: 'info',
-      title: '입고 방식 배정',
-      question: '이번 입고 물량을 어느 방식으로 받을지 판단합니다',
       options: INBOUND_CANDIDATES,
-      verdict: '로봇암 배정, 자동화 입고 지시 하달',
+      lines: [
+        '입고 차량 도착, 적재 형태 판독 결과 팔레트 24 · 박스 312 혼적',
+        '가용 설비 3종 비교, 혼적 박스 처리 가능 여부와 처리 속도 대조',
+        '로봇암 배정, 자동화 입고 지시 하달',
+      ],
     });
     w.demoStep = 'gapBeforeCutoff';
   } else if (step === 'gapBeforeCutoff') {
@@ -573,6 +575,20 @@ export default function useSimulation() {
           enqueueStory(w, {
             title: `WCS 오더 그룹핑 의사결정 · OG-${groupId}`,
             tone: 'info',
+            options: [
+              ...plan.stations.map((st) => ({
+                key: st.key,
+                label: st.label,
+                note: `배정 ${st.orders.toLocaleString()}건`,
+                chosen: st.key === lane,
+              })),
+              {
+                key: 'shuttle',
+                label: '팔레트 보관자동화',
+                note: `배정 ${plan.pallet.toLocaleString()}건`,
+                chosen: lane === 'shuttle',
+              },
+            ].slice(0, 4),
             lines: [
               `${plan.title} ${plan.total.toLocaleString()}건 중 ${rel.label} 배정분 ${plan.laneTotal(lane).toLocaleString()}건 확인`,
               `설비 가용 능력 기준 분할, OG-${groupId} ${rel.size}건 편성. 잔여 ${remaining.toLocaleString()}건`,
@@ -857,6 +873,7 @@ export default function useSimulation() {
             'DAS(컨베이어) 여유 용량 확인, 경로별 예상 지연 시간 산출',
             '총량피킹 물량을 DAS(컨베이어)로 우회, 분류 부하 분산',
           ],
+          options: INCIDENT_SCRIPTS.bottleneck.options,
         };
         effect = (world) => {
           let rerouted = 0;
@@ -887,9 +904,10 @@ export default function useSimulation() {
           tone: 'urgent',
           lines: [
             `긴급 오더 수신, ${dock.method} 도크 도착. 당일 출고 마감 임박`,
-            '표준 보관 경유 시 마감 초과, 하이클라이머 즉시 가용 재고 확인',
-            '보관 단계 생략, 하이클라이머 하이패스로 우선 처리 지시',
+            '표준 보관 경유 시 마감 초과, 박스/pcs 보관자동화 즉시 가용 재고 확인',
+            '보관 단계 생략, 박스/pcs 보관자동화 하이패스로 우선 처리 지시',
           ],
+          options: INCIDENT_SCRIPTS.urgent.options,
         };
         effect = (world) => {
           world.urgentTokens = [
@@ -925,6 +943,12 @@ export default function useSimulation() {
             '잔여 출고 도크 2개 부하 비교, 재할당 경로 및 소요시간 산출',
             '고립 물량을 가용 도크로 재할당, 출고 중단 없이 라인 유지',
           ],
+          options: OUTBOUND_DOCKS.map((d, i) => ({
+            key: d.id,
+            label: `${d.method} 도크`,
+            note: d.id === dock.id ? '정지, 배정 불가' : i === 0 ? '가용, 부하 낮음' : '가용',
+            chosen: d.id !== dock.id && OUTBOUND_DOCKS.findIndex((x) => x.id !== dock.id) === i,
+          })),
         };
         effect = (world) => {
           let rerouted = 0;
