@@ -99,7 +99,6 @@ function freshWorld() {
     failure: null,
     story: null,
     storyQueue: [],
-    storyGroupingShown: false,
     firstInboundDone: false,
     wavesStarted: 0,
     closing: false,
@@ -115,7 +114,6 @@ function freshWorld() {
     // the plan currently on the floor, and what is left of it to release
     wavePlan: null,
     waveQueue: [],
-    waveStoryShown: false,
     groupReleaseTimer: 0,
     // Running ledger of every routing call WCS makes - shown as live counters
     // instead of a text feed that scrolls faster than anyone can read.
@@ -151,7 +149,6 @@ function advanceDemo(w, dt, enqueue) {
       kind: 'banner',
       tone: 'info',
       title: `LX님, ${todayLabel()} 물류센터 가동을 시작합니다`,
-      caption: '입고 라인 가동 중. 출고 오더가 접수되면 WCS가 전 공정을 실시간으로 판단합니다',
     });
     w.demoStep = 'gapBeforeCutoff';
   } else if (step === 'gapBeforeCutoff') {
@@ -193,13 +190,19 @@ function startWave(w, enqueue, plan, opening) {
           ? plan.pallet
           : (plan.stations.find((st) => st.key === key)?.orders ?? 0);
       world.wavePlan = { ...plan, laneTotal };
-      world.waveQueue = buildReleases(plan);
-      world.waveStoryShown = false;
+      // APPEND. Assigning here dropped whatever the morning book had not
+      // released yet the moment the afternoon one was decided: five of wave
+      // one's ten groups were thrown away, and the day closed reporting 5,970
+      // of 7,000 orders shipped without anything looking wrong on the floor.
+      world.waveQueue = [...world.waveQueue, ...buildReleases(plan)];
       world.wmsOrdersSpawned += plan.total;
-      world.wmsPendingCount = plan.total;
+      world.wmsPendingCount += plan.total;
       world.counts = { ...world.counts, order: world.counts.order + plan.total };
       world.groupReleaseTimer = GROUP_RELEASE_MS;
       world.wavesStarted += 1;
+      // the two cutoffs are the scheduled work; incidents are what happens
+      // afterwards, so the first one is timed from the last allocation
+      if (world.wavesStarted >= 2) world.autoEventAt = world.simClock + 20000;
     },
   );
 }
@@ -564,41 +567,10 @@ export default function useSimulation() {
         // The grouping decision is explained once per wave. After that the
         // mechanism is known and the room should be watching work move, not
         // reading the same three lines fourteen more times.
-        if (!w.waveStoryShown) {
-          w.waveStoryShown = true;
-          const plan = w.wavePlan;
-          enqueueStory(w, {
-            title: `WCS 오더 그룹핑 의사결정 · OG-${groupId}`,
-            tone: 'info',
-            // same three-window shape as every other decision: 상황 인지
-            // opens the terminal, 대안 탐색 opens the route comparison
-            terminal: {
-              title: `OG-${groupId} 편성 분석`,
-              lines: releaseTerminalLines(plan, rel, remaining),
-            },
-            options: [
-              ...plan.stations.map((st) => ({
-                key: st.key,
-                label: st.label,
-                note: `배정 ${st.orders.toLocaleString()}건`,
-                chosen: st.key === lane,
-              })),
-              {
-                key: 'shuttle',
-                label: '팔레트 보관자동화',
-                note: `배정 ${plan.pallet.toLocaleString()}건`,
-                chosen: lane === 'shuttle',
-              },
-            ].slice(0, 4),
-            lines: [
-              `${plan.title} ${plan.total.toLocaleString()}건 중 ${rel.label} 배정분 ${plan.laneTotal(lane).toLocaleString()}건 확인`,
-              `설비 가용 능력 기준 분할, OG-${groupId} ${rel.size}건 편성. 잔여 ${remaining.toLocaleString()}건`,
-              `${rel.label} 작업 지시 하달. ${routeText}`,
-            ],
-          });
-        } else {
-          pushEvent(`OG-${groupId} ${rel.size}건 편성, ${rel.label} 배정 · 잔여 ${remaining.toLocaleString()}건`, 'info');
-        }
+        // No cinematic here. The wave decision that released this queue
+        // already showed the equipment allocation at 최적 결정; replaying it
+        // per group told the room the same decision twice in a row.
+        pushEvent(`OG-${groupId} ${rel.size}건 편성, ${rel.label} 배정 · 잔여 ${remaining.toLocaleString()}건`, 'info');
       }
 
       // -- advance order-group tokens --
@@ -672,7 +644,6 @@ export default function useSimulation() {
               nextTokens.push({ ...tk, phase: 'atOutbound', t: 0 });
             }
           } else if (tk.phase === 'atOutbound') {
-            w.sampleOut += 1;
             doneDelta += 1;
             nextTokens.push({
               ...tk,
@@ -689,6 +660,7 @@ export default function useSimulation() {
         const doneCount = group.doneCount + doneDelta;
         if (doneDelta > 0 && doneCount >= GROUP_TOKENS_PER_GROUP && !group.counted) {
           w.completedCount = Math.min(TOTAL_ORDERS, w.completedCount + group.size);
+          w.sampleOut += group.size;
           pushEvent(`OG-${group.id} 출고 완료, ${group.size}건 발송`, 'ok');
           group = { ...group, counted: true };
         }
@@ -753,7 +725,6 @@ export default function useSimulation() {
               nextTokens.push({ ...tk, phase: 'atOutbound', t: 0 });
             }
           } else if (tk.phase === 'atOutbound') {
-            w.sampleOut += 1;
             doneDelta += 1;
             nextTokens.push({
               ...tk,
@@ -770,6 +741,7 @@ export default function useSimulation() {
         const doneCount = ship.doneCount + doneDelta;
         if (doneDelta > 0 && doneCount >= PALLET_SHIP_TOKENS && !ship.counted) {
           w.palletCompleted += ship.size;
+          w.sampleOut += ship.size;
           pushEvent(`팔레트 출고그룹 #${ship.id} 완료, ${ship.size}건 발송`, 'ok');
           ship = { ...ship, counted: true };
         }
@@ -838,7 +810,7 @@ export default function useSimulation() {
       }
 
       // -- incidents fire on their own, the way they do on a real floor --
-      if (w.demoStep === 'done' && !w.closing && w.simClock >= w.autoEventAt && !w.story && !w.storyQueue.length) {
+      if (w.wavesStarted >= 2 && !w.closing && w.simClock >= w.autoEventAt && !w.story && !w.storyQueue.length) {
         w.autoEventAt = w.simClock + randInt(AUTO_EVENT_MIN_MS, AUTO_EVENT_MAX_MS);
         const options = ['urgent'];
         if (!w.bottleneck) options.push('bottleneck');
@@ -856,6 +828,9 @@ export default function useSimulation() {
       }
 
       // -- sample history once per sim-second --
+      // Inbound is counted in the same unit as outbound so the two series
+      // are comparable: one absorbed cargo unit stands for a batch of stock,
+      // scaled to the order volume a shift of it supports.
       if (w.metricSample >= 1000) {
         w.metricSample = 0;
         w.history = [...w.history, { t: w.history.length, inRate: w.sampleIn, outRate: w.sampleOut }].slice(-46);
