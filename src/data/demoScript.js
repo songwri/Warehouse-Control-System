@@ -46,6 +46,18 @@ function apportion(total, stations) {
 
 // Orders arriving as whole pallets never touch a picking station: they ship
 // from pallet automation through packing. The rest is box/pcs work.
+// The docks pool everything the wave produces and take a third each, so the
+// split is stated here rather than left to be inferred from the floor.
+export function dockSplit(total) {
+  const base = Math.floor(total / 3);
+  const rest = total - base * 3;
+  return [
+    { key: 'OUT-1', label: '로봇암 도크', orders: base + (rest > 0 ? 1 : 0) },
+    { key: 'OUT-2', label: '무인지게차 도크', orders: base + (rest > 1 ? 1 : 0) },
+    { key: 'OUT-3', label: '일반 지게차 도크', orders: base },
+  ];
+}
+
 export function buildPlan({ id, title, total, palletShare, avgSku, note }) {
   const pallet = Math.round(total * palletShare);
   const boxPcs = total - pallet;
@@ -114,11 +126,39 @@ export function planTerminalLines(plan) {
   for (const st of plan.stations) {
     lines.push({ text: `   · ${st.label}`, value: `${st.orders.toLocaleString()}건`, indent: true, dim: true });
   }
+  const bulk = plan.stations.filter((st) => st.flow === 'bulk').reduce((n, st) => n + st.orders, 0);
+  const direct = plan.total - bulk;
+  const autoPack = Math.round(plan.total * 0.55);
+  const docks = dockSplit(plan.total);
   lines.push(
+    { text: '분류 경유 여부 판정', value: '', ok: true },
+    { text: `   · 분류 설비 경유 (총량피킹)`, value: `${bulk.toLocaleString()}건`, indent: true, dim: true },
+    { text: `   · 분류 미경유 직행`, value: `${direct.toLocaleString()}건`, indent: true, dim: true },
+    { text: '포장 라인 배정', value: '', ok: true },
+    { text: `   · 자동 포장`, value: `${autoPack.toLocaleString()}건`, indent: true, dim: true },
+    { text: `   · 수동 포장`, value: `${(plan.total - autoPack).toLocaleString()}건`, indent: true, dim: true },
+    { text: '출고 도크 배차', value: '3개 도크 균등', ok: true },
+  );
+  for (const d of docks) {
+    lines.push({ text: `   · ${d.label}`, value: `${d.orders.toLocaleString()}건`, indent: true, dim: true });
+  }
+  lines.push(
+    { text: '출고 마감 시간 대비 여유', value: plan.utilisation >= 95 ? '타이트' : '확보', ok: true },
     { text: '검수 자동화용 스마트글라스 착용 지시', value: '', ok: true },
     { text: '인원 배정 및 오더 지시 완료', value: '모니터링 모드 전환', ok: true },
   );
   return lines;
+}
+
+// What 최적 결정 shows for a wave. The strategy is one choice, but its
+// OUTCOME is a simultaneous assignment across every route - showing a single
+// confirmation chip made it look like WCS had picked one machine and sent the
+// whole book there.
+export function planAllocationChips(plan) {
+  return [
+    { key: 'shuttle', label: '팔레트 보관자동화', orders: plan.pallet },
+    ...plan.stations.map((st) => ({ key: st.key, label: st.label, orders: st.orders })),
+  ];
 }
 
 // ---- Phase 1: the single inbound load --------------------------------
@@ -276,7 +316,7 @@ export function planDecisionLines(plan) {
   return [
     `${plan.title} ${plan.total.toLocaleString()}건 일괄 접수, 평균 오더라인 ${plan.avgSku} 확인`,
     `배분 방식 3종 비교, 설비별 가용 능력과 오더 유형 대조`,
-    `가용 능력 비례 배분 확정. 팔레트 ${plan.pallet.toLocaleString()}건 직송, 박스/pcs ${plan.boxPcs.toLocaleString()}건 중 ${top.label} ${top.orders.toLocaleString()}건 선배정`,
+    `가용 능력 비례 배분 확정. ${plan.stations.length + 1}개 설비에 동시 배정, 출고 도크 3종 균등 배차`,
   ];
 }
 

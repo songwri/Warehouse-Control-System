@@ -142,7 +142,7 @@ export function PileStack({ col, row, count, color, cap = 5, elevation = 8 }) {
           }}
         />
       ))}
-      <span className="mt-1 font-mono text-ui-micro font-bold tracking-normal text-slate-100 drop-shadow">{count}</span>
+      <span className="mt-1 font-mono text-ui-meta font-bold tracking-normal text-slate-100 drop-shadow">{count}</span>
     </div>
   );
 }
@@ -165,7 +165,7 @@ export function Callout({ col, row, text, tone = 'info', elevation = 78 }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -8, scale: 0.95 }}
         transition={{ duration: 0.25 }}
-        className="whitespace-nowrap rounded-md border px-2.5 py-1 font-mono text-ui-body font-semibold"
+        className="whitespace-nowrap rounded-md border px-3 py-1 font-mono text-ui-card font-semibold"
         style={{
           background: 'rgba(10,15,27,.96)',
           borderColor: `${color}80`,

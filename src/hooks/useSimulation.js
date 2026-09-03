@@ -35,13 +35,12 @@ import {
 } from '../data/timings.js';
 import {
   todayLabel,
-  inboundTerminalLines,
   planTerminalLines,
   planDecisionLines,
+  planAllocationChips,
   releaseTerminalLines,
   ALLOCATION_CANDIDATES,
   buildReleases,
-  INBOUND_CANDIDATES,
   INCIDENT_SCRIPTS,
   WAVE_1,
   WAVE_2,
@@ -130,7 +129,11 @@ function freshWorld() {
 // out a timer, then names the next beat. Nothing here starts a timer that
 // could still be running when the following beat begins, which is what keeps
 // the ambient simulation and the script from stepping on each other.
-const DEMO_HOLD = { greeting: 0, inboundNotice: 0, gapBeforeCutoff: 10000, gapBeforeWave2: 15000 };
+// The walkthrough is about OUTBOUND. Goods receipt still runs on the floor,
+// but it no longer gets a cinematic of its own: the room is here to watch
+// what happens to an order book, and three beats about how a truck was
+// unloaded pushed that story eight seconds further away.
+const DEMO_HOLD = { greeting: 0, gapBeforeCutoff: 7000, gapBeforeWave2: 15000 };
 
 function advanceDemo(w, dt, enqueue) {
   if (w.demoStep === 'done') return;
@@ -148,29 +151,7 @@ function advanceDemo(w, dt, enqueue) {
       kind: 'banner',
       tone: 'info',
       title: `LX님, ${todayLabel()} 물류센터 가동을 시작합니다`,
-      caption: '입고부터 출고까지 전 공정을 WCS가 실시간으로 판단합니다',
-    });
-    w.demoStep = 'inboundNotice';
-  } else if (step === 'inboundNotice') {
-    enqueue(w, {
-      kind: 'banner',
-      tone: 'info',
-      title: '입고 오더가 발생하였습니다. 분석을 시작합니다',
-    });
-    w.demoStep = 'inboundTerminal';
-  } else if (step === 'inboundTerminal') {
-    w.demoStep = 'inboundAssign';
-  } else if (step === 'inboundAssign') {
-    enqueue(w, {
-      title: 'WCS 입고 방식 배정',
-      tone: 'info',
-      terminal: { title: '입고 오더 분석', lines: inboundTerminalLines() },
-      options: INBOUND_CANDIDATES,
-      lines: [
-        '입고 차량 도착, 적재 형태 판독 결과 팔레트 24 · 박스 312 혼적',
-        '가용 설비 3종 비교, 혼적 박스 처리 가능 여부와 처리 속도 대조',
-        '로봇암 배정, 자동화 입고 지시 하달',
-      ],
+      caption: '입고 라인 가동 중. 출고 오더가 접수되면 WCS가 전 공정을 실시간으로 판단합니다',
     });
     w.demoStep = 'gapBeforeCutoff';
   } else if (step === 'gapBeforeCutoff') {
@@ -203,6 +184,7 @@ function startWave(w, enqueue, plan, opening) {
       tone: 'info',
       terminal: { title: `${plan.title} 분석 및 작업 할당`, lines: planTerminalLines(plan), typed: true },
       options: ALLOCATION_CANDIDATES,
+      allocation: planAllocationChips(plan),
       lines: planDecisionLines(plan),
     },
     (world) => {
@@ -286,7 +268,7 @@ function storageBuildingPos(bandKey) {
 // on the buildings themselves the chips crossed each other and the dock cards
 // behind them. Fanning them out along the column axis gives each band its own
 // lane without moving the buildings.
-const CALLOUT_LANE = { climber: 2.2, shuttle: 0, rack: -2.2 };
+const CALLOUT_LANE = { climber: 3.4, shuttle: 0, rack: -3.4 };
 function storageCalloutPos(bandKey) {
   const at = storageBuildingPos(bandKey);
   return { col: at.col + (CALLOUT_LANE[bandKey] || 0), row: at.row };
@@ -409,7 +391,7 @@ export default function useSimulation() {
 
       // -- scripted opening drives what the floor is allowed to do yet --
       advanceDemo(w, dt, enqueueStory);
-      const inboundUnlocked = w.demoStep === 'gapBeforeCutoff' || w.demoStep === 'gapBeforeWave2' || w.demoStep === 'done';
+      const inboundUnlocked = w.demoStep !== 'greeting';
       const ordersUnlocked = false; // orders arrive as scripted waves, not on a drip
 
       if (inboundUnlocked) w.vehicleSpawnTimer += dt;
@@ -516,7 +498,7 @@ export default function useSimulation() {
           w.counts = { ...w.counts, storage: w.counts.storage + 1 };
           w.sampleIn += 1;
           const bPos = storageCalloutPos(u.bandKey);
-          addCallout(w, bPos.col, bPos.row, `입고 +1 · ${u.vehicleMethod}`, 'ok');
+          addCallout(w, bPos.col, bPos.row, `+1 ${u.vehicleMethod}`, 'ok');
           // dropped - absorbed into storage
         } else {
           nextCargo.push(u);
@@ -635,7 +617,7 @@ export default function useSimulation() {
           } else if (tk.phase === 'atPicking') {
             w.storageCounts = { ...w.storageCounts, [tk.sourceBand]: Math.max(0, (w.storageCounts[tk.sourceBand] || 0) - 1) };
             const srcPos = storageCalloutPos(tk.sourceBand);
-            addCallout(w, srcPos.col, srcPos.row, `출고 -1 · ${laneInfo(tk.lane).label}`, 'urgent');
+            addCallout(w, srcPos.col, srcPos.row, `-1 ${laneInfo(tk.lane).label}`, 'urgent');
             const fromPos = pickingLanePos(tk.lane);
             w.counts = { ...w.counts, picking: w.counts.picking + 1 };
             if (tk.lane === 'climber') {
@@ -742,7 +724,7 @@ export default function useSimulation() {
         flashPulse(PACKING_COL, 6);
         setCoreCaption(w, `판단: 팔레트 보관자동화 ${PALLET_SHIP_THRESHOLD}건 → 즉시 출고`);
         const shuttlePos = storageBuildingPos('shuttle');
-        addCallout(w, shuttlePos.col, shuttlePos.row, `출고 -${PALLET_SHIP_THRESHOLD} · 팔레트 직송`, 'urgent');
+        addCallout(w, shuttlePos.col, shuttlePos.row, `-${PALLET_SHIP_THRESHOLD} 팔레트 직송`, 'urgent');
       }
 
       const nextShipments = [];

@@ -140,7 +140,7 @@ export default function IsoWarehouse({
               }}
             >
               <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: z.color }} />
-              <span className="font-mono text-ui-lead font-bold tracking-wide text-slate-100">{z.label}</span>
+              <span className="font-mono text-ui-head font-bold tracking-wide text-slate-100">{z.label}</span>
             </div>
           );
         })}
@@ -155,7 +155,7 @@ export default function IsoWarehouse({
           // nothing to collide with.
           const at =
             g.side === 'inbound'
-              ? isoPoint(g.col, midRow, 88)
+              ? isoPoint(g.col, midRow, 112)
               : isoPoint(g.col + 3.1, midRow, 26);
           const zone = g.side === 'inbound' ? ZONES[0] : ZONES[ZONES.length - 1];
           return (
@@ -166,7 +166,7 @@ export default function IsoWarehouse({
                 left: at.x,
                 top: at.y,
                 transform: 'translate(-50%, -50%)',
-                fontSize: 14,
+                fontSize: 16,
                 color: zone.color,
                 textShadow: '0 2px 8px rgba(0,0,0,.9)',
                 zIndex: 4200,
@@ -184,7 +184,7 @@ export default function IsoWarehouse({
             left: isoPoint((INTEGRATED_COLS[0] + INTEGRATED_COLS[1]) / 2 + 2.6, INTEGRATED_ROWS[0] - 1.1, 34).x,
             top: isoPoint((INTEGRATED_COLS[0] + INTEGRATED_COLS[1]) / 2 + 2.6, INTEGRATED_ROWS[0] - 1.1, 34).y,
             transform: 'translate(-50%, -50%)',
-            fontSize: 13.5,
+            fontSize: 15.5,
             color: '#7fc7e8',
             borderColor: `${INTEGRATED_COLOR}66`,
             background: 'rgba(9,18,26,.9)',
@@ -212,7 +212,7 @@ export default function IsoWarehouse({
 
         {/* inbound vehicle docks - WCS decision #1: which vehicle method */}
         {INBOUND_DOCKS.map((d) => (
-          <IsoBuilding key={d.id} col={1} row={d.row} width={100} elevation={44} borderColor="rgba(58,168,189,.45)">
+          <IsoBuilding key={d.id} col={1} row={d.row} width={116} elevation={44} borderColor="rgba(58,168,189,.45)">
             <EquipIcon name={VEHICLE_ICON[d.vehicle]} className="h-4 w-4" style={{ color: '#5cc4d8' }} />
             <span className="text-ui-card font-semibold leading-tight text-slate-50">{d.method}</span>
           </IsoBuilding>
@@ -237,7 +237,7 @@ export default function IsoWarehouse({
             key={key}
             col={STORAGE_COL_RANGE[0] + 1}
             row={(band.rowRange[0] + band.rowRange[1]) / 2}
-            width={150}
+            width={172}
             elevation={40}
             borderColor={`${LANE_COLOR[band.lane]}55`}
           >
@@ -262,9 +262,9 @@ export default function IsoWarehouse({
         {Object.entries(PICKING_LANES).map(([key, lane], i) => (
           <IsoBuilding
             key={key}
-            col={PICKING_COL_RANGE[0] + 1 + i * 0.7}
+            col={PICKING_COL_RANGE[0] + 0.6 + i * 1.15}
             row={(lane.rowRange[0] + lane.rowRange[1]) / 2}
-            width={124}
+            width={142}
             elevation={42}
             borderColor="rgba(59,171,132,.45)"
           >
@@ -282,7 +282,7 @@ export default function IsoWarehouse({
               key={key}
               col={SORT_COL}
               row={hub.row}
-              width={122}
+              width={140}
               elevation={54}
               borderColor={isBottleneck ? '#ef5350' : 'rgba(154,122,212,.5)'}
               glow="#ef5350"
@@ -297,7 +297,7 @@ export default function IsoWarehouse({
 
         {/* packing stations - auto/manual, 50/50 by order group */}
         {Object.entries(PACKING_STATIONS).map(([key, st]) => (
-          <IsoBuilding key={key} col={PACKING_COL} row={st.row} width={108} elevation={44} borderColor="rgba(204,127,69,.45)">
+          <IsoBuilding key={key} col={PACKING_COL} row={st.row} width={124} elevation={44} borderColor="rgba(204,127,69,.45)">
             <EquipIcon name={st.icon} className="h-4 w-4" style={{ color: '#e0a06a' }} />
             <span className="text-ui-card font-semibold leading-tight text-slate-50">{st.label}</span>
           </IsoBuilding>
@@ -307,7 +307,7 @@ export default function IsoWarehouse({
         {OUTBOUND_DOCKS.map((d) => {
           const isFailed = failure && failure.dockId === d.id;
           return (
-            <IsoBuilding key={d.id} col={OUTBOUND_COL} row={d.row} width={100} elevation={44} borderColor={isFailed ? '#ef5350' : 'rgba(201,144,47,.5)'} glow="#ef5350" active={isFailed}>
+            <IsoBuilding key={d.id} col={OUTBOUND_COL} row={d.row} width={116} elevation={44} borderColor={isFailed ? '#ef5350' : 'rgba(201,144,47,.5)'} glow="#ef5350" active={isFailed}>
               {isFailed ? (
                 <>
                   <EquipIcon name="error" className="blink-fast h-4 w-4 text-slate-500" />

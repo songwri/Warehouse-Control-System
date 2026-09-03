@@ -55,14 +55,14 @@ export default {
       // room comes from this list; the `ui-` prefix keeps it from colliding
       // with Tailwind's defaults, which the landing page still uses.
       fontSize: {
-        'ui-micro': ['10px', { lineHeight: '1.3', letterSpacing: '0.09em' }],
-        'ui-meta': ['11px', { lineHeight: '1.35' }],
-        'ui-body': ['12px', { lineHeight: '1.45' }],
-        'ui-card': ['13px', { lineHeight: '1.35' }],
-        'ui-lead': ['15px', { lineHeight: '1.35' }],
-        'ui-head': ['18px', { lineHeight: '1.25' }],
-        'ui-stat': ['22px', { lineHeight: '1.1' }],
-        'ui-hero': ['30px', { lineHeight: '1.05' }],
+        'ui-micro': ['11px', { lineHeight: '1.3', letterSpacing: '0.09em' }],
+        'ui-meta': ['12px', { lineHeight: '1.35' }],
+        'ui-body': ['13px', { lineHeight: '1.45' }],
+        'ui-card': ['15px', { lineHeight: '1.35' }],
+        'ui-lead': ['17px', { lineHeight: '1.35' }],
+        'ui-head': ['20px', { lineHeight: '1.25' }],
+        'ui-stat': ['24px', { lineHeight: '1.1' }],
+        'ui-hero': ['32px', { lineHeight: '1.05' }],
       },
       boxShadow: {
         glow: '0 0 24px -4px rgba(79,142,247,.75)',

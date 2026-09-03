@@ -514,7 +514,50 @@ export default function DecisionStory({ story, onFinish }) {
               {/* 최적 결정 confirms the pick. The candidates themselves were
                   laid out and compared one stage earlier, so repeating all of
                   them here would read as the panel losing its place. */}
-              {story.options && activeStage >= 2 && (
+              {/* A wave is assigned to every route at once, so its conclusion
+                  is a set, not a winner. One confirmation chip made it read
+                  as though WCS had picked a single machine and sent the whole
+                  book there. */}
+              {story.allocation && activeStage >= 2 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35 }}
+                  className="mt-4 rounded-lg border px-4 py-3"
+                  style={{ borderColor: tone.border, background: `${tone.accent}14` }}
+                >
+                  <div className="mb-2 flex items-center gap-2">
+                    <span
+                      className="flex flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                      style={{ width: 20, height: 20, background: tone.accent, color: '#0a0f1b' }}
+                    >
+                      ✓
+                    </span>
+                    <span className="font-mono text-ui-micro uppercase tracking-[0.14em] text-slate-500">
+                      동시 배정 {story.allocation.length}개 설비
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {story.allocation.map((a, i) => (
+                      <motion.span
+                        key={a.key}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3, delay: 0.15 + i * 0.1 }}
+                        className="flex items-baseline gap-1.5 rounded-md border px-2.5 py-1"
+                        style={{ borderColor: `${tone.accent}59`, background: 'rgba(16,24,40,.7)' }}
+                      >
+                        <span className="text-ui-body font-semibold text-slate-100">{a.label}</span>
+                        <span className="font-mono text-ui-meta font-bold tabular-nums" style={{ color: tone.accent }}>
+                          {a.orders.toLocaleString()}
+                        </span>
+                      </motion.span>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
+              {story.options && !story.allocation && activeStage >= 2 && (
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
