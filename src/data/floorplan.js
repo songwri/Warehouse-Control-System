@@ -43,7 +43,10 @@ export const DOCK_GROUPS = [
 export const STORAGE_COL_RANGE = [4, 10];
 export const INTEGRATED_ROWS = [0, 3];
 export const INTEGRATED_COLS = [3, 19];
-export const INTEGRATED_COLOR = '#3f9bc9';
+// The integrated band cuts horizontally across storage, picking and sort, so
+// it has to separate from all three at once: a teal that is 66 from storage's
+// violet, 36 from picking's green and 124 from sort's magenta.
+export const INTEGRATED_COLOR = '#2fb0a8';
 export const STORAGE_BANDS = {
   climber: { rowRange: [0, 3], label: '박스/pcs 보관자동화', sub: '보관 · 피킹 · 분류 통합', lane: 'pcs' },
   shuttle: { rowRange: [4, 7], label: '팔레트 보관자동화', sub: '팔레트 단위', lane: 'plt' },
@@ -109,18 +112,25 @@ DOCK_GROUPS.push(
   { key: 'out-manual', label: '[ 일반 출고 ]', col: OUTBOUND_COL, rowRange: [9, 9], side: 'outbound' },
 );
 
-// Visual zone bands (floor tint). Hues are desaturated versions of the token
-// colours: moving order tokens stay full strength because they are what you
-// track, static chrome sits one chroma step back. Packing and outbound are
-// deliberately far apart in BOTH hue and lightness - as an orange next to a
-// gold they were nearly the same band of floor.
+// Visual zone bands (floor tint). The board is read left to right, so what
+// matters is not that six hues look nice together but that each one is
+// unmistakable against the ONE zone it touches. The ramp is therefore chosen
+// for adjacent separation, taking a large step at every boundary rather than
+// walking around the wheel:
+//   입고 cyan 188 -> 보관 violet 242  (54)
+//   보관 violet 242 -> 피킹 green 140 (102)
+//   피킹 green 140 -> 분류 magenta 300 (160)
+//   분류 magenta 300 -> 포장 orange 14 (74)
+//   포장 orange 14 -> 출고 yellow-green 65 (51, plus a full step of lightness)
+// The last pair sat 20 degrees apart as an orange beside a gold and read as
+// one continuous band of floor.
 export const ZONES = [
-  { key: 'inbound', label: '입고', colRange: [0, 2], color: '#3aa8bd' },
-  { key: 'storage', label: '보관', colRange: [3, 10], color: '#5188cf' },
-  { key: 'picking', label: '피킹', colRange: [11, 15], color: '#3bab84' },
-  { key: 'sort', label: '분류', colRange: [16, 19], color: '#9a7ad4' },
-  { key: 'packing', label: '포장', colRange: [20, 24], color: '#c2603a' },
-  { key: 'outbound', label: '출고', colRange: [25, 29], color: '#cbb04a' },
+  { key: 'inbound', label: '입고', colRange: [0, 2], color: '#2bb0c4' },
+  { key: 'storage', label: '보관', colRange: [3, 10], color: '#6b6ee0' },
+  { key: 'picking', label: '피킹', colRange: [11, 15], color: '#43b06a' },
+  { key: 'sort', label: '분류', colRange: [16, 19], color: '#c25ec2' },
+  { key: 'packing', label: '포장', colRange: [20, 24], color: '#c4552e' },
+  { key: 'outbound', label: '출고', colRange: [25, 29], color: '#b8c247' },
 ];
 
 export function zoneOfCol(col) {

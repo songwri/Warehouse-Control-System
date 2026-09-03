@@ -24,8 +24,6 @@ import {
   pickDock,
   rowInBand,
   rowInLane,
-  decideGroupType,
-  pickPickingLane,
   pickSortHub,
   pickPackMethod,
   randInt,
@@ -37,10 +35,12 @@ import {
 import {
   todayLabel,
   inboundTerminalLines,
-  cutoffTerminalLines,
+  planTerminalLines,
+  buildReleases,
   INBOUND_CANDIDATES,
-  DEMO_ALLOCATION,
-  DEMO_TOTAL_ORDERS,
+  INCIDENT_SCRIPTS,
+  WAVE_1,
+  WAVE_2,
 } from '../data/demoScript.js';
 
 const TICK_MS = 100;
@@ -66,10 +66,6 @@ const LANE_SOURCE_BAND = { climber: 'climber', amr: 'rack', dpc: 'rack', dps: 'r
 let idSeq = 1;
 const nextId = () => idSeq++;
 
-function wmsThreshold() {
-  return randInt(120, 170);
-}
-
 function freshWorld() {
   return {
     vehicles: [],
@@ -82,7 +78,7 @@ function freshWorld() {
     wmsPendingCount: 0,
     wmsOrdersSpawned: 0,
     wmsGroupsFormed: 0,
-    wmsNextThreshold: wmsThreshold(),
+    wmsNextThreshold: 0,
     totalAbsorbed: 0,
     completedCount: 0,
     urgentCompleted: 0,
@@ -113,7 +109,10 @@ function freshWorld() {
     // can never run two beats at once or race the ambient simulation.
     demoStep: 'greeting',
     demoTimer: 0,
-    demoAllocation: null,
+    // the plan currently on the floor, and what is left of it to release
+    wavePlan: null,
+    waveQueue: [],
+    waveStoryShown: false,
     groupReleaseTimer: 0,
     // Running ledger of every routing call WCS makes - shown as live counters
     // instead of a text feed that scrolls faster than anyone can read.
@@ -127,7 +126,7 @@ function freshWorld() {
 // out a timer, then names the next beat. Nothing here starts a timer that
 // could still be running when the following beat begins, which is what keeps
 // the ambient simulation and the script from stepping on each other.
-const DEMO_HOLD = { greeting: 0, inboundNotice: 0, gapBeforeCutoff: 10000 };
+const DEMO_HOLD = { greeting: 0, inboundNotice: 0, gapBeforeCutoff: 10000, gapBeforeWave2: 15000 };
 
 function advanceDemo(w, dt, enqueue) {
   if (w.demoStep === 'done') return;
@@ -169,30 +168,41 @@ function advanceDemo(w, dt, enqueue) {
     });
     w.demoStep = 'gapBeforeCutoff';
   } else if (step === 'gapBeforeCutoff') {
-    enqueue(w, {
-      kind: 'banner',
-      tone: 'urgent',
-      title: '전일 주문이 마감되었습니다. 분석을 시작합니다',
-      caption: `총 ${DEMO_TOTAL_ORDERS.toLocaleString()}건의 출고 오더가 일괄 접수되었습니다`,
-    });
-    w.demoStep = 'cutoffTerminal';
-  } else if (step === 'cutoffTerminal') {
-    enqueue(
-      w,
-      { kind: 'terminal', title: '전일 마감 오더 분석 및 작업 할당', lines: cutoffTerminalLines(), typed: true },
-      (world) => {
-        // the allocation the terminal just announced becomes the floor's plan
-        // the analysis just announced the full book; it is in the queue now
-        world.demoAllocation = { ...DEMO_ALLOCATION };
-        world.wmsOrdersSpawned = DEMO_TOTAL_ORDERS;
-        world.wmsPendingCount = DEMO_TOTAL_ORDERS;
-        world.counts = { ...world.counts, order: DEMO_TOTAL_ORDERS };
-        world.wmsNextThreshold = 140;
-        world.groupReleaseTimer = GROUP_RELEASE_MS;
-      },
-    );
+    startWave(w, enqueue, WAVE_1, '전일 주문이 마감되었습니다. 분석을 시작합니다');
+    w.demoStep = 'gapBeforeWave2';
+  } else if (step === 'gapBeforeWave2') {
+    startWave(w, enqueue, WAVE_2, '오후 오더를 마감합니다. 분석을 시작합니다');
     w.demoStep = 'done';
   }
+}
+
+// Announce a wave, show the analysis that produced its plan, then load that
+// plan onto the floor. The releases are built here, so what the terminal
+// prints and what the floor then does come from the same object.
+function startWave(w, enqueue, plan, opening) {
+  enqueue(w, {
+    kind: 'banner',
+    tone: 'urgent',
+    title: opening,
+    caption: `총 ${plan.total.toLocaleString()}건의 출고 오더가 일괄 접수되었습니다`,
+  });
+  enqueue(
+    w,
+    { kind: 'terminal', title: `${plan.title} 분석 및 작업 할당`, lines: planTerminalLines(plan), typed: true },
+    (world) => {
+      const laneTotal = (key) =>
+        key === 'shuttle'
+          ? plan.pallet
+          : (plan.stations.find((st) => st.key === key)?.orders ?? 0);
+      world.wavePlan = { ...plan, laneTotal };
+      world.waveQueue = buildReleases(plan);
+      world.waveStoryShown = false;
+      world.wmsOrdersSpawned += plan.total;
+      world.wmsPendingCount = plan.total;
+      world.counts = { ...world.counts, order: world.counts.order + plan.total };
+      world.groupReleaseTimer = GROUP_RELEASE_MS;
+    },
+  );
 }
 
 // Cinematics are queued, never played on top of each other; the tick loop
@@ -252,6 +262,17 @@ function storageSourcePos(bandKey) {
 function storageBuildingPos(bandKey) {
   const band = STORAGE_BANDS[bandKey];
   return { col: STORAGE_COL_RANGE[0] + 1, row: (band.rowRange[0] + band.rowRange[1]) / 2 };
+}
+
+// Where a band's "why" chip hangs. The three storage buildings sit within two
+// columns of each other while their chips are several times wider, so anchored
+// on the buildings themselves the chips crossed each other and the dock cards
+// behind them. Fanning them out along the column axis gives each band its own
+// lane without moving the buildings.
+const CALLOUT_LANE = { climber: 2.2, shuttle: 0, rack: -2.2 };
+function storageCalloutPos(bandKey) {
+  const at = storageBuildingPos(bandKey);
+  return { col: at.col + (CALLOUT_LANE[bandKey] || 0), row: at.row };
 }
 
 // Only the slow-moving figures the dashboard reads - split out so they can be
@@ -370,8 +391,8 @@ export default function useSimulation() {
 
       // -- scripted opening drives what the floor is allowed to do yet --
       advanceDemo(w, dt, enqueueStory);
-      const inboundUnlocked = w.demoStep === 'gapBeforeCutoff' || w.demoStep === 'cutoffTerminal' || w.demoStep === 'done';
-      const ordersUnlocked = w.demoStep === 'done';
+      const inboundUnlocked = w.demoStep === 'gapBeforeCutoff' || w.demoStep === 'gapBeforeWave2' || w.demoStep === 'done';
+      const ordersUnlocked = false; // orders arrive as scripted waves, not on a drip
 
       if (inboundUnlocked) w.vehicleSpawnTimer += dt;
       if (ordersUnlocked) w.wmsTimer += dt;
@@ -479,7 +500,7 @@ export default function useSimulation() {
           w.totalAbsorbed += 1;
           w.counts = { ...w.counts, storage: w.counts.storage + 1 };
           w.sampleIn += 1;
-          const bPos = storageBuildingPos(u.bandKey);
+          const bPos = storageCalloutPos(u.bandKey);
           addCallout(w, bPos.col, bPos.row, `입고 +1 · ${u.vehicleMethod}`, 'ok');
           // dropped - absorbed into storage
         } else {
@@ -499,67 +520,67 @@ export default function useSimulation() {
       }
 
       w.groupReleaseTimer += dt;
-      if (w.wmsPendingCount >= w.wmsNextThreshold && w.groupReleaseTimer >= GROUP_RELEASE_MS) {
+      if (w.waveQueue.length && w.groupReleaseTimer >= GROUP_RELEASE_MS) {
         w.groupReleaseTimer = 0;
-        const groupSize = w.wmsNextThreshold;
-        w.wmsPendingCount -= groupSize;
-        w.wmsNextThreshold = wmsThreshold();
-        const groupType = decideGroupType();
+        const rel = w.waveQueue[0];
+        w.waveQueue = w.waveQueue.slice(1);
+        w.wmsPendingCount = Math.max(0, w.wmsPendingCount - rel.size);
         const groupId = w.wmsGroupsFormed + 1;
         w.wmsGroupsFormed = groupId;
+
+        // A release names its own destination, so every token in the group
+        // goes where the plan said it would. `integrated` work sorts inside
+        // the box/pcs band and skips the sorters; `bulk` must be sorted after
+        // picking; `discrete` is already order-level and runs the express row.
+        const lane = rel.lane;
+        const groupType = rel.flow === 'discrete' ? 'discrete' : 'bulk';
+        const sourceBand = LANE_SOURCE_BAND[lane] || 'shuttle';
+
         // Staggered negative `t` (like cargo units) so the group's tokens
         // don't move in lockstep as one indistinguishable clump - each
         // order visibly departs storage and arrives at picking on its own.
-        const tokens = Array.from({ length: GROUP_TOKENS_PER_GROUP }).map((_, i) => {
-          const lane = pickPickingLane(groupType);
-          const sourceBand = LANE_SOURCE_BAND[lane];
-          return {
-            id: nextId(),
-            lane,
-            groupType,
-            phase: 'toPicking',
-            t: -i * 480,
-            from: storageSourcePos(sourceBand),
-            to: pickingLanePos(lane),
-            sourceBand,
-            rerouted: false,
-          };
-        });
-        w.groups = [...w.groups, { id: groupId, type: groupType, size: groupSize, tokens, doneCount: 0 }];
-        const pickTypeLabel = groupType === 'bulk' ? '총량피킹' : '오더피킹';
-        pushEvent(`WCS 그룹핑 · OG-${groupId} (${pickTypeLabel}, ${groupSize}건)`, 'info');
-        flashPulse(PICKING_COL_RANGE[0] + 1, 5.5);
-        setCoreCaption(w, `판단: OG-${groupId} ${groupSize}건 → ${pickTypeLabel} 편성`);
+        const tokens = Array.from({ length: GROUP_TOKENS_PER_GROUP }).map((_, i) => ({
+          id: nextId(),
+          lane,
+          groupType,
+          phase: 'toPicking',
+          t: -i * 480,
+          from: storageSourcePos(sourceBand),
+          to: pickingLanePos(lane),
+          sourceBand,
+          rerouted: false,
+        }));
+        w.groups = [...w.groups, { id: groupId, type: groupType, size: rel.size, tokens, doneCount: 0 }];
+
+        const routeText =
+          rel.flow === 'integrated'
+            ? '통합 처리, 분류 미경유로 포장 직행'
+            : rel.flow === 'discrete'
+              ? '오더피킹 판정, 분류 미경유 직행 레인'
+              : '총량피킹 판정, 분류 설비 경유 후 포장';
+        const remaining = w.waveQueue.reduce((n, r) => n + r.size, 0);
+
+        flashPulse(pickingLanePos(lane).col, pickingLanePos(lane).row);
+        setCoreCaption(w, `판단: OG-${groupId} ${rel.size}건 → ${rel.label} 배정`);
         w.counts = { ...w.counts, grouping: w.counts.grouping + 1 };
 
-        // Every grouping is a cinematic: WCS explains why this batch was cut
-        // the way it was, and which equipment it just committed the work to.
-        const tally = tokens.reduce((m, t) => ({ ...m, [t.lane]: (m[t.lane] || 0) + 1 }), {});
-        const laneText = Object.entries(tally)
-          .map(([k, v]) => `${laneInfo(k).label} ${v}`)
-          .join(' · ');
-        const wearsGlasses = !!(tally.amr || tally.dpc);
-        const reason =
-          groupType === 'bulk'
-            ? '오더라인 단순, 동일 SKU 중복 다수로 묶음 처리 이득'
-            : '오더라인 복합, SKU 분산으로 건별 처리가 유리';
-        const routeText =
-          groupType === 'bulk'
-            ? '분류 설비 경유 후 포장'
-            : '분류 미경유, 직행 레인으로 포장 연결';
-        if (!w.storyGroupingShown) {
-        w.storyGroupingShown = true;
-        enqueueStory(w, {
-          title: `WCS 오더 그룹핑 의사결정 · OG-${groupId}`,
-          tone: groupType === 'bulk' ? 'info' : 'urgent',
-          lines: [
-            `대기 오더 ${groupSize}건 마감, OG-${groupId} 편성`,
-            `${reason}, ${pickTypeLabel} 판정`,
-            `${laneText} 배정${wearsGlasses ? ', 스마트글라스 착용 지시' : ''}. ${routeText}`,
-          ],
-        });
+        // The grouping decision is explained once per wave. After that the
+        // mechanism is known and the room should be watching work move, not
+        // reading the same three lines fourteen more times.
+        if (!w.waveStoryShown) {
+          w.waveStoryShown = true;
+          const plan = w.wavePlan;
+          enqueueStory(w, {
+            title: `WCS 오더 그룹핑 의사결정 · OG-${groupId}`,
+            tone: 'info',
+            lines: [
+              `${plan.title} ${plan.total.toLocaleString()}건 중 ${rel.label} 배정분 ${plan.laneTotal(lane).toLocaleString()}건 확인`,
+              `설비 가용 능력 기준 분할, OG-${groupId} ${rel.size}건 편성. 잔여 ${remaining.toLocaleString()}건`,
+              `${rel.label} 작업 지시 하달. ${routeText}`,
+            ],
+          });
         } else {
-          pushEvent(`OG-${groupId} ${groupSize}건 편성, ${laneText} 배정`, 'info');
+          pushEvent(`OG-${groupId} ${rel.size}건 편성, ${rel.label} 배정 · 잔여 ${remaining.toLocaleString()}건`, 'info');
         }
       }
 
@@ -578,7 +599,7 @@ export default function useSimulation() {
             nextTokens.push({ ...tk, phase: 'atPicking', t: 0, speed: PICK_SPEED[tk.lane] || 1 });
           } else if (tk.phase === 'atPicking') {
             w.storageCounts = { ...w.storageCounts, [tk.sourceBand]: Math.max(0, (w.storageCounts[tk.sourceBand] || 0) - 1) };
-            const srcPos = storageBuildingPos(tk.sourceBand);
+            const srcPos = storageCalloutPos(tk.sourceBand);
             addCallout(w, srcPos.col, srcPos.row, `출고 -1 · ${laneInfo(tk.lane).label}`, 'urgent');
             const fromPos = pickingLanePos(tk.lane);
             w.counts = { ...w.counts, picking: w.counts.picking + 1 };
@@ -928,8 +949,27 @@ export default function useSimulation() {
         };
       }
 
-      if (auto || w.story) enqueueStory(w, story, effect);
-      else runDecisionModal(story, effect);
+      // Every incident is narrated the same way the scheduled work is: WCS
+      // says what it has seen, shows its working in the terminal, commits to
+      // a decision, and afterwards says what it took away from it. Queueing
+      // all four beats (rather than playing the first immediately) keeps them
+      // in order, since the queue only ever runs one cinematic at a time.
+      const script = INCIDENT_SCRIPTS[kind];
+      if (script) {
+        enqueueStory(w, { kind: 'banner', tone: script.tone, title: script.opening });
+        enqueueStory(w, { kind: 'terminal', title: script.terminalTitle, lines: script.lines });
+        enqueueStory(w, story, effect);
+        enqueueStory(w, {
+          kind: 'banner',
+          tone: 'info',
+          title: 'WCS 학습 완료',
+          caption: script.learned,
+        });
+      } else if (auto || w.story) {
+        enqueueStory(w, story, effect);
+      } else {
+        runDecisionModal(story, effect);
+      }
     },
     [pushEvent, flashPulse, runDecisionModal]
   );

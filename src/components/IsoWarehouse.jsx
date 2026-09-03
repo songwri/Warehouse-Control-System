@@ -150,7 +150,13 @@ export default function IsoWarehouse({
             beats a legend, because the grouping is spatial to begin with. */}
         {DOCK_GROUPS.map((g) => {
           const midRow = (g.rowRange[0] + g.rowRange[1]) / 2;
-          const at = isoPoint(g.col, midRow, 88);
+          // Inbound brackets sit above their docks; outbound ones sit out on
+          // the floor to the right of theirs, where there is open board and
+          // nothing to collide with.
+          const at =
+            g.side === 'inbound'
+              ? isoPoint(g.col, midRow, 88)
+              : isoPoint(g.col + 3.1, midRow, 26);
           const zone = g.side === 'inbound' ? ZONES[0] : ZONES[ZONES.length - 1];
           return (
             <div
