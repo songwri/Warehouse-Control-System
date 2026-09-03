@@ -182,7 +182,7 @@ function startWave(w, enqueue, plan, opening) {
     {
       title: `WCS ${plan.title} 작업 할당`,
       tone: 'info',
-      terminal: { title: `${plan.title} 분석 및 작업 할당`, lines: planTerminalLines(plan), typed: true },
+      terminal: { title: `${plan.title} 분석 및 작업 할당`, lines: planTerminalLines(plan), typed: true, rate: 0.5 },
       options: ALLOCATION_CANDIDATES,
       allocation: planAllocationChips(plan),
       lines: planDecisionLines(plan),

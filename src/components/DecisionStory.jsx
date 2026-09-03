@@ -18,7 +18,7 @@ const TOTAL_MS = INTRO_MS + 3 * STAGE_MS + OUTRO_MS;
 // the terminal as a separate beat BEFORE the stages put the data first and
 // the noticing second, which is backwards.
 function terminalWindow(story) {
-  return story?.terminal ? cmdDuration(story.terminal.lines, story.terminal.typed) : 0;
+  return story?.terminal ? cmdDuration(story.terminal.lines, story.terminal.typed, story.terminal.rate) : 0;
 }
 
 // 대안 탐색 opens a second window of its own: WCS laying the candidates out
@@ -36,13 +36,15 @@ const CORNER_HOLD_MS = 2600;
 
 // Scripted-opening beats. A banner is a title card, terminal is the raw
 // analysis window; every decision itself uses the three-stage form.
-const BANNER_MS = 4200;
+// "분석을 시작합니다" is one line of speech, not something to study:
+// it runs 1.5x faster than it did.
+const BANNER_MS = 2800;
 
 // How long the whole thing runs, by kind.
 function runtimeOf(story) {
   if (!story) return TOTAL_MS;
   if (story.kind === 'banner') return BANNER_MS;
-  if (story.kind === 'terminal') return cmdDuration(story.lines, story.typed);
+  if (story.kind === 'terminal') return cmdDuration(story.lines, story.typed, story.rate);
   return TOTAL_MS + terminalWindow(story) + candidateWindow(story);
 }
 
@@ -480,6 +482,7 @@ export default function DecisionStory({ story, onFinish }) {
                     lines={story.terminal.lines}
                     elapsed={termElapsed}
                     typed={story.terminal.typed}
+                    rate={story.terminal.rate}
                   />
                 </div>
               ) : (

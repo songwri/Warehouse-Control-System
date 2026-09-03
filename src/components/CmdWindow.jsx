@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
 // The analysis terminal. Deliberately the plainest thing on screen: black
@@ -8,30 +9,47 @@ const LINE_MS = 750;      // how long one line takes to appear
 const CHAR_MS = 26;       // per-character typing speed when `typed` is on
 const TAIL_MS = 1500;     // beat after the last line before it closes
 
-export function cmdDuration(lines, typed) {
-  if (!typed) return lines.length * LINE_MS + TAIL_MS;
-  return lines.reduce((sum, l) => sum + l.text.length * CHAR_MS + 320, 0) + TAIL_MS;
+// `rate` scales how fast the window runs. The outbound analysis is the one
+// screen in the demo dense enough that a viewer has to actually read it, so
+// it plays at half speed; the incident terminals stay at 1x.
+export function cmdDuration(lines, typed, rate = 1) {
+  const line = LINE_MS / rate;
+  const char = CHAR_MS / rate;
+  if (!typed) return lines.length * line + TAIL_MS;
+  return lines.reduce((sum, l) => sum + l.text.length * char + 320 / rate, 0) + TAIL_MS;
 }
 
 // How many lines are visible, and how much of the newest one is typed.
-function progress(lines, elapsed, typed) {
+function progress(lines, elapsed, typed, rate = 1) {
+  const line = LINE_MS / rate;
+  const char = CHAR_MS / rate;
   if (!typed) {
-    const shown = Math.min(lines.length, Math.floor(elapsed / LINE_MS) + 1);
+    const shown = Math.min(lines.length, Math.floor(elapsed / line) + 1);
     return { shown, partial: lines[shown - 1]?.text.length ?? 0 };
   }
   let acc = 0;
   for (let i = 0; i < lines.length; i++) {
-    const span = lines[i].text.length * CHAR_MS + 320;
+    const span = lines[i].text.length * char + 320 / rate;
     if (elapsed < acc + span) {
-      return { shown: i + 1, partial: Math.floor((elapsed - acc) / CHAR_MS) };
+      return { shown: i + 1, partial: Math.floor((elapsed - acc) / char) };
     }
     acc += span;
   }
   return { shown: lines.length, partial: lines[lines.length - 1].text.length };
 }
 
-export default function CmdWindow({ title, lines, elapsed, typed = false }) {
-  const { shown, partial } = progress(lines, elapsed, typed);
+export default function CmdWindow({ title, lines, elapsed, typed = false, rate = 1 }) {
+  const { shown, partial } = progress(lines, elapsed, typed, rate);
+
+  // A long report outgrows the window, so the view follows the line being
+  // written. Without this the terminal keeps typing below the fold and the
+  // reader is left staring at the opening lines while the answer scrolls
+  // past out of sight.
+  const bodyRef = useRef(null);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [shown]);
 
   return (
     <motion.div
@@ -49,7 +67,7 @@ export default function CmdWindow({ title, lines, elapsed, typed = false }) {
         <span className="ml-2 font-mono text-ui-meta tracking-wide text-slate-500">{title}</span>
       </div>
 
-      <div className="min-h-[200px] px-5 py-3 font-mono text-ui-body leading-[1.8]">
+      <div ref={bodyRef} className="max-h-[320px] min-h-[200px] overflow-y-auto px-5 py-3 font-mono text-ui-body leading-[1.8]">
         {lines.slice(0, shown).map((l, i) => {
           const isLast = i === shown - 1;
           const text = isLast && typed ? l.text.slice(0, partial) : l.text;

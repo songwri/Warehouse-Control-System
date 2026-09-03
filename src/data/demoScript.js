@@ -114,37 +114,46 @@ export const WAVES = [WAVE_1, WAVE_2];
 // Terminal read-out for a wave, built from that wave's own plan so the lines
 // can never drift from what the floor is about to do.
 export function planTerminalLines(plan) {
+  const staff = staffPlan(plan);
+  const chosen = staff.picking.length;
+  const pool = STATION_CAPACITY.length + 1; // the four picking routes plus pallet direct
+
   const lines = [
     { text: '접수 오더 수량 확인', value: `${plan.total.toLocaleString()}건`, ok: true },
     { text: '평균 오더라인(SKU) 분석', value: `${plan.avgSku}`, ok: true },
     { text: '오더 유형 분류', value: plan.note, ok: true },
-    { text: '보관 형태별 분리', value: '', ok: true },
-    { text: `└ 팔레트 단위 · 팔레트 보관자동화 직송`, value: `${plan.pallet.toLocaleString()}건`, indent: true },
-    { text: `└ 박스/pcs 단위 · 피킹 설비 배정`, value: `${plan.boxPcs.toLocaleString()}건`, indent: true },
+    { text: '가용 설비 조회 및 선택', value: `${pool}종 중 ${chosen}종`, ok: true },
     { text: '설비 가용 능력 대비 배분', value: `가동률 ${plan.utilisation}%`, ok: true },
   ];
-  for (const st of plan.stations) {
-    lines.push({ text: `   · ${st.label}`, value: `${st.orders.toLocaleString()}건`, indent: true, dim: true });
+
+  const row = (r, extra) => ({
+    text: `   · ${r.label}`,
+    value: `${r.orders.toLocaleString()}건 · ${extra}`,
+    indent: true,
+    dim: true,
+  });
+
+  lines.push({ text: '보관·피킹 설비 배정', value: `${staff.waves} wave 편성`, ok: true });
+  for (const r of staff.picking) {
+    lines.push(row(r, `${r.waves} wave · ${r.people}명${r.robots ? ` · 로봇 ${r.robots}대` : ''}`));
   }
-  const bulk = plan.stations.filter((st) => st.flow === 'bulk').reduce((n, st) => n + st.orders, 0);
-  const direct = plan.total - bulk;
-  const autoPack = Math.round(plan.total * 0.55);
+
+  lines.push({ text: '분류 설비 배정', value: `${staff.sorting.length}종`, ok: true });
+  for (const r of staff.sorting) lines.push(row(r, `${r.people}명 · ${r.rule}`));
+
+  lines.push({ text: '포장 라인 배정', value: '2종', ok: true });
+  for (const r of staff.packing) lines.push(row(r, `${r.people}명`));
+
   const docks = dockSplit(plan.total);
-  lines.push(
-    { text: '분류 경유 여부 판정', value: '', ok: true },
-    { text: `   · 분류 설비 경유 (총량피킹)`, value: `${bulk.toLocaleString()}건`, indent: true, dim: true },
-    { text: `   · 분류 미경유 직행`, value: `${direct.toLocaleString()}건`, indent: true, dim: true },
-    { text: '포장 라인 배정', value: '', ok: true },
-    { text: `   · 자동 포장`, value: `${autoPack.toLocaleString()}건`, indent: true, dim: true },
-    { text: `   · 수동 포장`, value: `${(plan.total - autoPack).toLocaleString()}건`, indent: true, dim: true },
-    { text: '출고 도크 배차', value: '3개 도크 균등', ok: true },
-  );
+  lines.push({ text: '출고 도크 배차', value: '3개 도크 균등', ok: true });
   for (const d of docks) {
     lines.push({ text: `   · ${d.label}`, value: `${d.orders.toLocaleString()}건`, indent: true, dim: true });
   }
+
   lines.push(
+    { text: '검수 자동화용 스마트글라스 지시', value: `${staff.glassesAt.length}개 구역`, ok: true },
+    { text: '총 투입 인원 확정', value: `${staff.totalPeople}명`, ok: true },
     { text: '출고 마감 시간 대비 여유', value: plan.utilisation >= 95 ? '타이트' : '확보', ok: true },
-    { text: '검수 자동화용 스마트글라스 착용 지시', value: '', ok: true },
     { text: '인원 배정 및 오더 지시 완료', value: '모니터링 모드 전환', ok: true },
   );
   return lines;
@@ -312,11 +321,11 @@ export const ALLOCATION_CANDIDATES = [
 ];
 
 export function planDecisionLines(plan) {
-  const top = plan.stations[0];
+  const staff = staffPlan(plan);
   return [
     `${plan.title} ${plan.total.toLocaleString()}건 일괄 접수, 평균 오더라인 ${plan.avgSku} 확인`,
     `배분 방식 3종 비교, 설비별 가용 능력과 오더 유형 대조`,
-    `가용 능력 비례 배분 확정. ${plan.stations.length + 1}개 설비에 동시 배정, 출고 도크 3종 균등 배차`,
+    `가용 능력 비례 배분 확정. ${staff.picking.length}종 설비 ${staff.waves} wave 편성, 총 ${staff.totalPeople}명 투입 · 스마트글라스 ${staff.glassesAt.length}개 구역 지시`,
   ];
 }
 
@@ -329,4 +338,115 @@ export function releaseTerminalLines(plan, rel, remaining) {
     { text: '그룹 편성 단위 산정', value: `${rel.size.toLocaleString()}건`, ok: true },
     { text: '잔여 미편성 물량', value: `${remaining.toLocaleString()}건`, ok: true },
   ];
+}
+
+// ---- Labour ----------------------------------------------------------
+// What each route actually costs in people. These are the rules an operations
+// planner would state out loud, so they are written as rules and applied,
+// rather than as numbers typed into a script:
+//
+//   박스/pcs 보관자동화  무인 (관제 1명)
+//   팔레트 보관자동화    무인 (관제 1명)
+//   AMR(로봇)          1대 시간당 30건, 로봇 2대당 작업자 1명
+//   DPS(컨베이어)       라인 고정 10명
+//   DPC(카트)          작업자 1인 시간당 30건
+//   AGV(로봇) 분류      주문 100건당 3명
+//   DAS(컨베이어) 분류   기본 5명, 물량이 많으면 10명
+//   수동 포장           작업자 1인 시간당 40건
+//   자동 포장           무인 (관제 1명)
+//
+// Anywhere a person is assigned,検수 자동화용 스마트글라스가 함께 지시된다.
+export const SHIFT_HOURS = 4;
+const AMR_PER_ROBOT_HOUR = 30;
+const AMR_ROBOTS_PER_WORKER = 2;
+const DPS_LINE_CREW = 10;
+const DPC_PER_WORKER_HOUR = 30;
+const AGV_WORKERS_PER_100 = 3;
+const DAS_BASE_CREW = 5;
+const DAS_SURGE_CREW = 10;
+const DAS_SURGE_AT = 1000;
+const MANUAL_PACK_PER_WORKER_HOUR = 40;
+const AUTO_PACK_SHARE = 0.55;
+
+// Bulk work has to be sorted, and the two sorters differ in throughput, so
+// the split between them follows their capacity rather than a coin toss.
+const SORT_CAPACITY = [
+  { key: 'libiao', label: 'AGV(로봇)', cap: 1200 },
+  { key: 'das', label: 'DAS(컨베이어)', cap: 800 },
+];
+
+const ceilDiv = (n, d) => (d > 0 ? Math.ceil(n / d) : 0);
+
+function stationLabour(st) {
+  if (st.key === 'amr') {
+    const robots = ceilDiv(st.orders, AMR_PER_ROBOT_HOUR * SHIFT_HOURS);
+    return { robots, people: ceilDiv(robots, AMR_ROBOTS_PER_WORKER), rule: `로봇 ${robots}대 · 2대당 1명` };
+  }
+  if (st.key === 'dps') return { people: DPS_LINE_CREW, rule: '라인 고정 배치' };
+  if (st.key === 'dpc') {
+    return { people: ceilDiv(st.orders, DPC_PER_WORKER_HOUR * SHIFT_HOURS), rule: '1인 시간당 30건' };
+  }
+  return { people: 1, rule: '무인 · 관제' };
+}
+
+export function staffPlan(plan) {
+  const releases = buildReleases(plan);
+  const wavesOf = (lane) => releases.filter((r) => r.lane === lane).length;
+
+  const picking = plan.stations.map((st) => ({
+    key: st.key,
+    label: st.label,
+    orders: st.orders,
+    waves: wavesOf(st.key),
+    ...stationLabour(st),
+  }));
+  picking.unshift({
+    key: 'shuttle',
+    label: '팔레트 보관자동화',
+    orders: plan.pallet,
+    waves: wavesOf('shuttle'),
+    people: 1,
+    rule: '무인 · 관제',
+  });
+
+  // sorting: only bulk-flow routes pass through a sorter
+  const bulk = plan.stations.filter((st) => st.flow === 'bulk').reduce((n, st) => n + st.orders, 0);
+  const capTotal = SORT_CAPACITY.reduce((n, c) => n + c.cap, 0);
+  let assigned = 0;
+  const sorting = SORT_CAPACITY.map((c, i) => {
+    const orders = i === SORT_CAPACITY.length - 1 ? bulk - assigned : Math.round((bulk * c.cap) / capTotal);
+    assigned += orders;
+    const people =
+      c.key === 'libiao'
+        ? ceilDiv(orders, 100) * AGV_WORKERS_PER_100
+        : orders > DAS_SURGE_AT
+          ? DAS_SURGE_CREW
+          : DAS_BASE_CREW;
+    const rule = c.key === 'libiao' ? '주문 100건당 3명' : orders > DAS_SURGE_AT ? '증량 고정 10명' : '기본 고정 5명';
+    return { key: c.key, label: c.label, orders, people, rule };
+  }).filter((r) => r.orders > 0);
+
+  const autoPack = Math.round(plan.total * AUTO_PACK_SHARE);
+  const manualPack = plan.total - autoPack;
+  const packing = [
+    { key: 'auto', label: '자동 포장', orders: autoPack, people: 1, rule: '무인 · 관제' },
+    {
+      key: 'manual',
+      label: '수동 포장',
+      orders: manualPack,
+      people: ceilDiv(manualPack, MANUAL_PACK_PER_WORKER_HOUR * SHIFT_HOURS),
+      rule: '1인 시간당 40건',
+    },
+  ];
+
+  const all = [...picking, ...sorting, ...packing];
+  return {
+    picking,
+    sorting,
+    packing,
+    waves: releases.length,
+    totalPeople: all.reduce((n, r) => n + r.people, 0),
+    // smart glasses go wherever a person is actually picking or sorting
+    glassesAt: [...picking, ...sorting].filter((r) => r.rule !== '무인 · 관제').map((r) => r.label),
+  };
 }
